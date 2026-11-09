@@ -1,0 +1,21 @@
+{
+  "name": "bola8-backend",
+  "version": "0.2.0",
+  "private": true,
+  "description": "API MVC para el sistema de gestión Bola8",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "pg": "^8.16.3"
+  }
+}

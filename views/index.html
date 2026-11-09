@@ -1,0 +1,3025 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bola8 | Sistema Web Multi-Sucursal de Gestión de Billares</title>
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono para cronómetros -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons via CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            felt: {
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b',
+            },
+            slateLounge: {
+              950: '#090d16',
+              900: '#0f172a',
+              850: '#141e33',
+              800: '#1e293b',
+              700: '#334155',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Personalización sutil de scrollbar para estética nocturna */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    @keyframes pulse-border {
+      0%, 100% { border-color: rgba(245, 158, 11, 0.5); }
+      50% { border-color: rgba(245, 158, 11, 1); }
+    }
+    .active-table-glow {
+      animation: pulse-border 2.5s infinite;
+    }
+
+    /* ===================================================================== */
+    /* SOPORTE MODO CLARO EJECUTIVO (ADAPTACIÓN DE PALETA LOUNGE)            */
+    /* ===================================================================== */
+    html.light body {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+    html.light .bg-slateLounge-950 { background-color: #f1f5f9 !important; }
+    html.light .bg-slateLounge-900,
+    html.light .bg-slateLounge-900\/90,
+    html.light .bg-slateLounge-900\/60 {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+    }
+    html.light .bg-slate-950,
+    html.light .bg-slate-950\/80,
+    html.light .bg-slate-950\/70,
+    html.light .bg-slate-950\/60,
+    html.light .bg-slate-950\/50 {
+      background-color: #f8fafc !important;
+      border-color: #e2e8f0 !important;
+    }
+    html.light .bg-slate-900,
+    html.light .bg-slate-900\/50 {
+      background-color: #f8fafc !important;
+    }
+    html.light .bg-slate-800,
+    html.light .bg-slate-800\/90,
+    html.light .bg-slate-800\/60,
+    html.light .bg-slate-800\/50,
+    html.light .bg-slate-800\/40 {
+      background-color: #e2e8f0 !important;
+      border-color: #cbd5e1 !important;
+    }
+    html.light .border-slate-800,
+    html.light .border-slate-800\/80,
+    html.light .border-slate-700,
+    html.light .border-slate-700\/70 {
+      border-color: #cbd5e1 !important;
+    }
+    html.light .text-white { color: #0f172a !important; }
+    html.light .text-slate-100,
+    html.light .text-slate-200 { color: #1e293b !important; }
+    html.light .text-slate-300 { color: #334155 !important; }
+    html.light .text-slate-400,
+    html.light .text-slate-500 { color: #64748b !important; }
+    /* Preservar texto blanco en botones de acento sólido */
+    html.light .bg-emerald-600,
+    html.light .bg-sky-600,
+    html.light .bg-amber-600,
+    html.light .bg-rose-600,
+    html.light .bg-purple-600 {
+      color: #ffffff !important;
+    }
+    html.light .bg-emerald-600 *,
+    html.light .bg-sky-600 *,
+    html.light .bg-amber-600 *,
+    html.light .bg-rose-600 * {
+      color: #ffffff !important;
+    }
+
+    /* ===================================================================== */
+    /* ESTILOS DE IMPRESIÓN DEDICADOS PARA GENERACIÓN DE RECIBO PDF           */
+    /* ===================================================================== */
+    @media print {
+      body * {
+        visibility: hidden !important;
+      }
+      #print-receipt-area,
+      #print-receipt-area * {
+        visibility: visible !important;
+        color: #000000 !important;
+        background: #ffffff !important;
+      }
+      #print-receipt-area {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        max-width: 80mm !important;
+        margin: 0 auto !important;
+        padding: 12px !important;
+        border: none !important;
+        box-shadow: none !important;
+        font-family: 'JetBrains Mono', monospace !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slateLounge-950 text-slate-100 font-sans antialiased selection:bg-emerald-500 selection:text-white overflow-x-hidden">
+
+  <!-- Contenedor Principal App -->
+  <div class="min-h-screen flex flex-col lg:flex-row">
+
+    <!-- Overlay móvil para sidebar -->
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="fixed inset-0 bg-black/70 z-30 hidden lg:hidden backdrop-blur-sm"></div>
+
+    <!-- BARRA LATERAL (SIDEBAR) -->
+    <aside id="sidebar" class="fixed lg:static inset-y-0 left-0 z-40 w-72 bg-slateLounge-900 border-r border-slate-800/80 flex flex-col transition-transform duration-300 -translate-x-full lg:translate-x-0">
+      <!-- Logo Marca Bola8 -->
+      <div class="h-16 px-6 flex items-center justify-between border-b border-slate-800/80">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-gradient-to-br from-slate-800 to-black border-2 border-emerald-500/70 flex items-center justify-center shadow-lg shadow-emerald-950/50 relative">
+            <div class="w-5 h-5 rounded-full bg-white text-slate-950 font-extrabold text-xs flex items-center justify-center">8</div>
+          </div>
+          <div>
+            <span id="brand-title-sidebar" class="font-extrabold text-lg tracking-tight text-white">BOLA<span class="text-emerald-400">8</span></span>
+            <p class="text-[11px] text-slate-400 leading-none">Multi-Sucursal & POS</p>
+          </div>
+        </div>
+        <button onclick="toggleSidebar()" class="lg:hidden text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Perfil / Rol Activo -->
+      <div class="px-4 py-3 mx-3 mt-4 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center gap-3">
+        <div id="role-avatar" class="w-9 h-9 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-sm shrink-0">AG</div>
+        <div class="min-w-0 flex-1">
+          <p id="role-display-name" class="text-xs font-semibold text-white truncate">Administrador General</p>
+          <p id="role-display-scope" class="text-[11px] text-slate-400 truncate">Acceso Global • Todas las sedes</p>
+        </div>
+      </div>
+
+      <!-- Navegación Principal -->
+      <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto" id="main-nav">
+        <p data-i18n="nav_ops" class="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Operación en Salón</p>
+        
+        <button onclick="navigate('dashboard')" data-view="dashboard" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+          <i data-lucide="layout-grid" class="w-4 h-4"></i>
+          <span data-i18n="menu_dashboard">Dashboard Mesas</span>
+          <span id="nav-badge-active" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold">0</span>
+        </button>
+
+        <button onclick="navigate('pos')" data-view="pos" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="shopping-bag" class="w-4 h-4"></i>
+          <span data-i18n="menu_pos">Control Mesa & POS</span>
+        </button>
+
+        <button onclick="navigate('reservas')" data-view="reservas" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+          <span data-i18n="menu_reservas">Reservas</span>
+        </button>
+
+        <button onclick="navigate('historial')" data-view="historial" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="receipt-text" class="w-4 h-4"></i>
+          <span data-i18n="menu_historial">Historial y Recibos</span>
+          <span id="nav-badge-receipts" class="ml-auto text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-semibold">0</span>
+        </button>
+
+        <button onclick="navigate('caja')" data-view="caja" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="wallet" class="w-4 h-4"></i>
+          <span data-i18n="menu_caja">Arqueo y Caja</span>
+        </button>
+
+        <p data-i18n="nav_admin" class="px-3 pt-4 text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-2">Administración y Finanzas</p>
+
+        <button onclick="navigate('reportes')" data-view="reportes" id="nav-reportes" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span data-i18n="menu_reportes">Reportes Financieros</span>
+        </button>
+
+        <button onclick="navigate('mesas-admin')" data-view="mesas-admin" id="nav-mesas-admin" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="sliders" class="w-4 h-4"></i>
+          <span data-i18n="menu_mesas">Mesas y Tarifas/Min</span>
+        </button>
+
+        <button onclick="navigate('inventario')" data-view="inventario" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="package" class="w-4 h-4"></i>
+          <span data-i18n="menu_inventario">Inventario Local</span>
+          <span id="nav-badge-stock" class="ml-auto hidden text-xs px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-semibold">!</span>
+        </button>
+
+        <button onclick="navigate('sucursales')" data-view="sucursales" id="nav-sucursales" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="building-2" class="w-4 h-4"></i>
+          <span data-i18n="menu_sucursales">Sucursales Cadena</span>
+        </button>
+
+        <button onclick="navigate('usuarios')" data-view="usuarios" id="nav-usuarios" class="nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all">
+          <i data-lucide="users" class="w-4 h-4"></i>
+          <span data-i18n="menu_usuarios">Usuarios y Roles</span>
+        </button>
+      </nav>
+
+      <!-- Acceso Directo a Configuración en el Panel Izquierdo Deslizable -->
+      <div class="p-3 border-t border-slate-800/80 space-y-2">
+        <button onclick="openSettingsDrawer()" class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-slate-800/70 hover:bg-slate-800 border border-slate-700/70 text-xs font-semibold text-slate-200 transition cursor-pointer">
+          <span class="flex items-center gap-2.5">
+            <i data-lucide="settings" class="w-4 h-4 text-emerald-400"></i>
+            <span data-i18n="menu_settings">Configuración App</span>
+          </span>
+          <span id="sidebar-config-pill" class="px-2 py-0.5 rounded bg-slate-900 text-[10px] font-mono text-emerald-400">ES • Bs.</span>
+        </button>
+        <div class="px-1 flex items-center justify-between text-[10px] text-slate-500">
+          <span>React Native • Node • Supabase</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" title="Conectado"></span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ÁREA DE CONTENIDO PRINCIPAL -->
+    <div class="flex-1 flex flex-col min-w-0">
+
+      <!-- BARRA SUPERIOR (TOPBAR) -->
+      <header class="h-16 bg-slateLounge-900/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 flex items-center justify-between gap-3 sticky top-0 z-20">
+        <div class="flex items-center gap-3">
+          <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-xl bg-slate-800 text-slate-200 hover:bg-slate-700">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
+          <div>
+            <h1 id="topbar-title" class="text-base sm:text-lg font-bold text-white leading-tight">Dashboard Operativo</h1>
+            <p id="topbar-subtitle" class="text-xs text-slate-400 hidden sm:block">Monitoreo de mesas en tiempo real y métricas del turno</p>
+          </div>
+        </div>
+
+        <!-- Controles Globales: Selector Sucursal + Selector Rol -->
+        <div class="flex items-center gap-2 sm:gap-3">
+          <!-- Selector Sucursal -->
+          <div class="relative flex items-center bg-slate-800/90 border border-slate-700 rounded-xl px-2.5 py-1.5">
+            <i data-lucide="map-pin" class="w-4 h-4 text-emerald-400 mr-2 shrink-0"></i>
+            <select id="branch-selector" onchange="changeBranch(this.value)" class="bg-transparent text-xs sm:text-sm font-medium text-white focus:outline-none cursor-pointer pr-2 max-w-[140px] sm:max-w-[220px] truncate">
+              <!-- Rellenado dinámicamente -->
+            </select>
+          </div>
+
+          <!-- Selector Rol Simulado -->
+          <div class="relative flex items-center bg-slate-800/90 border border-amber-500/30 rounded-xl px-2.5 py-1.5">
+            <i data-lucide="shield-check" class="w-4 h-4 text-amber-400 mr-2 shrink-0 hidden sm:inline"></i>
+            <select id="role-selector" onchange="changeRole(this.value)" class="bg-transparent text-xs sm:text-sm font-medium text-amber-200 focus:outline-none cursor-pointer pr-1 max-w-[125px] sm:max-w-[190px] truncate">
+              <option value="admin_general" class="bg-slate-900 text-white">Admin General</option>
+              <option value="admin_sucursal" class="bg-slate-900 text-white">Admin Sucursal</option>
+              <option value="cajero" class="bg-slate-900 text-white">Cajero / Operador</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <!-- CONTENEDOR DE VISTAS DINÁMICAS -->
+      <main class="flex-1 p-4 lg:p-8 max-w-[1600px] w-full mx-auto">
+
+        <!-- ========================================================= -->
+        <!-- VISTA 1: DASHBOARD OPERATIVO (MESAS EN VIVO)              -->
+        <!-- ========================================================= -->
+        <section id="view-dashboard" class="view-section space-y-6">
+          <!-- KPIs del Turno -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Ingresos Totales Turno</p>
+                <p id="kpi-total-income" class="text-2xl font-extrabold text-white mt-1 font-mono">Bs. 0.00</p>
+                <p class="text-xs text-emerald-400 mt-1 flex items-center gap-1">
+                  <i data-lucide="trending-up" class="w-3.5 h-3.5"></i> Mesas + Ventas POS
+                </p>
+              </div>
+              <div class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                <i data-lucide="banknote" class="w-6 h-6"></i>
+              </div>
+            </div>
+
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Mesas Activas</p>
+                <p id="kpi-active-tables" class="text-2xl font-extrabold text-amber-400 mt-1 font-mono">0 / 0</p>
+                <p id="kpi-free-tables" class="text-xs text-slate-400 mt-1">0 mesas disponibles ahora</p>
+              </div>
+              <div class="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                <i data-lucide="timer" class="w-6 h-6"></i>
+              </div>
+            </div>
+
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Ventas POS Turno</p>
+                <p id="kpi-pos-sales" class="text-2xl font-extrabold text-sky-400 mt-1 font-mono">Bs. 0.00</p>
+                <p class="text-xs text-slate-400 mt-1">Bebidas, snacks y accesorios</p>
+              </div>
+              <div class="w-12 h-12 rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                <i data-lucide="beer" class="w-6 h-6"></i>
+              </div>
+            </div>
+
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-5 flex items-center justify-between">
+              <div>
+                <p class="text-xs font-medium text-slate-400 uppercase tracking-wider">Efectivo Esperado Caja</p>
+                <p id="kpi-cash-box" class="text-2xl font-extrabold text-purple-400 mt-1 font-mono">Bs. 0.00</p>
+                <p id="kpi-cash-base" class="text-xs text-slate-400 mt-1">Incluye base inicial</p>
+              </div>
+              <div class="w-12 h-12 rounded-2xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+                <i data-lucide="vault" class="w-6 h-6"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Barra de Filtros y Leyenda de Estados -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slateLounge-900/60 border border-slate-800/80 p-4 rounded-2xl">
+            <div class="flex flex-wrap items-center gap-4 text-xs font-medium">
+              <span class="flex items-center gap-2 text-emerald-400">
+                <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500"></span> Libre (Disponible)
+              </span>
+              <span class="flex items-center gap-2 text-amber-400">
+                <span class="w-3 h-3 rounded-full bg-amber-500 animate-ping"></span> Ocupada (Cronómetro Activo)
+              </span>
+              <span class="flex items-center gap-2 text-slate-400">
+                <span class="w-3 h-3 rounded-full bg-slate-600"></span> Mantenimiento
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="navigate('pos')" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold flex items-center gap-2 transition shadow-lg shadow-sky-950/50">
+                <i data-lucide="shopping-cart" class="w-4 h-4"></i> Venta Directa POS
+              </button>
+            </div>
+          </div>
+
+          <!-- Cuadrícula de Mesas en Tiempo Real -->
+          <div id="dashboard-tables-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            <!-- Tarjetas generadas por JS -->
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 2: CONTROL DE MESA Y PUNTO DE VENTA (POS)           -->
+        <!-- ========================================================= -->
+        <section id="view-pos" class="view-section hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Columna Izquierda: Cronómetro y Cuenta de Mesa (5 cols) -->
+            <div class="lg:col-span-5 space-y-5">
+              <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-5">
+                <div class="flex items-center justify-between mb-4">
+                  <label class="text-xs font-semibold uppercase tracking-wider text-slate-400">Seleccionar Mesa / Cuenta</label>
+                  <span id="pos-table-status-badge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400">Libre</span>
+                </div>
+                
+                <select id="pos-table-selector" onchange="selectPosTable(this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-emerald-500">
+                  <!-- Rellenado dinámicamente -->
+                </select>
+
+                <!-- Panel Cronómetro en Vivo (Solo visible si no es venta directa) -->
+                <div id="pos-timer-panel" class="mt-5 p-5 rounded-2xl bg-gradient-to-b from-slate-800/80 to-slate-900 border border-slate-700/70 text-center">
+                  <p id="pos-table-meta" class="text-xs text-slate-400 mb-1">Pool Profesional • Tarifa: Bs. 0.50 / min</p>
+                  <div id="pos-live-clock" class="text-4xl sm:text-5xl font-mono font-bold text-white tracking-wider my-3">
+                    00:00:00
+                  </div>
+                  <div class="flex items-center justify-center gap-4 text-xs text-slate-300 mb-5">
+                    <span>Minutos: <strong id="pos-live-minutes" class="text-amber-400">0</strong></span>
+                    <span>•</span>
+                    <span>Alquiler: <strong id="pos-live-rental-cost" class="text-emerald-400 font-mono">Bs. 0.00</strong></span>
+                  </div>
+
+                  <!-- Botones Control Tiempo -->
+                  <div class="grid grid-cols-2 gap-3" id="pos-timer-controls">
+                    <!-- Dinámico: Iniciar / Pausar / Reanudar -->
+                  </div>
+                </div>
+
+                <!-- Detalle de Consumos Cargados -->
+                <div class="mt-5">
+                  <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Consumos en esta cuenta</h3>
+                    <span id="pos-items-count" class="text-xs text-slate-500">0 ítems</span>
+                  </div>
+                  <div id="pos-cart-list" class="max-h-56 overflow-y-auto divide-y divide-slate-800/80 bg-slate-950/50 rounded-xl border border-slate-800/80 px-3">
+                    <!-- Ítems del carrito -->
+                  </div>
+                </div>
+
+                <!-- Resumen Total y Cobro -->
+                <div class="mt-5 pt-4 border-t border-slate-800 space-y-2">
+                  <div class="flex justify-between text-xs text-slate-400">
+                    <span>Subtotal Tiempo Mesa:</span>
+                    <span id="pos-summary-rental" class="font-mono text-slate-200">Bs. 0.00</span>
+                  </div>
+                  <div class="flex justify-between text-xs text-slate-400">
+                    <span>Subtotal Productos POS:</span>
+                    <span id="pos-summary-products" class="font-mono text-slate-200">Bs. 0.00</span>
+                  </div>
+                  <div class="flex justify-between items-center pt-2 text-lg font-extrabold text-white">
+                    <span>TOTAL A COBRAR:</span>
+                    <span id="pos-summary-total" class="font-mono text-emerald-400 text-2xl">Bs. 0.00</span>
+                  </div>
+
+                  <button onclick="openCheckoutModal()" id="pos-checkout-btn" class="w-full mt-3 py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/60 transition cursor-pointer">
+                    <i data-lucide="receipt" class="w-5 h-5"></i>
+                    <span>Finalizar y Cobrar Cuenta</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Columna Derecha: Catálogo de Productos POS (7 cols) -->
+            <div class="lg:col-span-7 bg-slateLounge-900 border border-slate-800 rounded-2xl p-5 flex flex-col">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 class="text-base font-bold text-white">Catálogo POS de Sucursal</h2>
+                  <p class="text-xs text-slate-400">Haz clic en un producto para añadirlo a la cuenta activa</p>
+                </div>
+                <div class="relative">
+                  <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                  <input type="text" id="pos-search-input" oninput="renderPosCatalog()" placeholder="Buscar bebida o snack..." class="bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 w-full sm:w-56">
+                </div>
+              </div>
+
+              <!-- Filtros de Categoría -->
+              <div class="flex flex-wrap gap-2 mb-5" id="pos-category-filters">
+                <button onclick="setPosCategory('Todas')" class="pos-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950">Todas</button>
+                <button onclick="setPosCategory('Cervezas')" class="pos-cat-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Cervezas</button>
+                <button onclick="setPosCategory('Bebidas')" class="pos-cat-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Bebidas / Gaseosas</button>
+                <button onclick="setPosCategory('Snacks')" class="pos-cat-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Snacks</button>
+                <button onclick="setPosCategory('Accesorios')" class="pos-cat-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Accesorios</button>
+              </div>
+
+              <!-- Grid de Productos -->
+              <div id="pos-products-grid" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5 overflow-y-auto max-h-[560px] pr-1">
+                <!-- Tarjetas de producto generadas por JS -->
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 3: ADMINISTRACIÓN DE MESAS Y TARIFAS POR MINUTO     -->
+        <!-- ========================================================= -->
+        <section id="view-mesas-admin" class="view-section hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slateLounge-900 border border-slate-800 p-5 rounded-2xl">
+            <div>
+              <h2 class="text-lg font-bold text-white">Configuración de Mesas y Tarifas por Minuto</h2>
+              <p class="text-xs text-slate-400">Crea mesas nuevas, ajusta individualmente el precio por minuto (Bs.) o elimina mesas inactivas.</p>
+            </div>
+            <button onclick="openNewTableModal()" id="btn-add-table" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-950/50 transition self-start sm:self-auto">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i> Crear Nueva Mesa
+            </button>
+          </div>
+
+          <div id="admin-tables-readonly-banner" class="hidden p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2.5">
+            <i data-lucide="lock" class="w-4 h-4 shrink-0"></i>
+            <span>Modo lectura: Tu rol actual (<strong>Cajero / Operador</strong>) no tiene permisos para crear, eliminar ni editar tarifas de mesas. Cambia a <em>Admin Sucursal</em> o <em>Admin General</em> para editar.</span>
+          </div>
+
+          <!-- Tabla de Administración de Mesas -->
+          <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-800 bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th class="py-3.5 px-5">Mesa</th>
+                    <th class="py-3.5 px-5">Categoría / Tipo</th>
+                    <th class="py-3.5 px-5">Tarifa por Minuto (Bs.)</th>
+                    <th class="py-3.5 px-5">Equivalente Hora</th>
+                    <th class="py-3.5 px-5">Estado Actual</th>
+                    <th class="py-3.5 px-5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-tables-tbody" class="divide-y divide-slate-800/80 text-sm">
+                  <!-- Filas dinámicas -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 4: INVENTARIO LOCAL                                 -->
+        <!-- ========================================================= -->
+        <section id="view-inventario" class="view-section hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slateLounge-900 border border-slate-800 p-5 rounded-2xl">
+            <div>
+              <h2 class="text-lg font-bold text-white">Inventario Local de Sucursal</h2>
+              <p class="text-xs text-slate-400">Control de existencias sincronizado automáticamente con las ventas del POS.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <div class="relative">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input type="text" id="inv-search-input" oninput="renderInventory()" placeholder="Filtrar producto..." class="bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+              </div>
+              <button onclick="openNewProductModal()" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 transition">
+                <i data-lucide="plus" class="w-4 h-4"></i> Nuevo Producto
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-800 bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th class="py-3.5 px-5">Producto</th>
+                    <th class="py-3.5 px-5">Categoría</th>
+                    <th class="py-3.5 px-5">Precio Venta</th>
+                    <th class="py-3.5 px-5">Stock Actual</th>
+                    <th class="py-3.5 px-5">Estado Stock</th>
+                    <th class="py-3.5 px-5 text-right">Reabastecer</th>
+                  </tr>
+                </thead>
+                <tbody id="inventory-tbody" class="divide-y divide-slate-800/80 text-sm">
+                  <!-- Filas dinámicas -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 5: RESERVAS DE MESAS                                -->
+        <!-- ========================================================= -->
+        <section id="view-reservas" class="view-section hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Formulario Nueva Reserva (4 cols) -->
+            <div class="lg:col-span-4 bg-slateLounge-900 border border-slate-800 rounded-2xl p-5 h-fit">
+              <h2 class="text-base font-bold text-white mb-1">Agendar Nueva Reserva</h2>
+              <p class="text-xs text-slate-400 mb-5">El sistema valida automáticamente que no existan cruces horarios en la mesa.</p>
+              
+              <form onsubmit="createReservation(event)" class="space-y-4">
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1.5">Nombre del Cliente</label>
+                  <input type="text" id="res-client-name" required placeholder="Ej. Carlos Mendoza" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1.5">Teléfono / WhatsApp</label>
+                  <input type="text" id="res-client-phone" required placeholder="Ej. 70712345" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-slate-300 mb-1.5">Mesa Solicitada</label>
+                  <select id="res-table-select" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                    <!-- Opciones dinámicas -->
+                  </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Hora Inicio</label>
+                    <input type="time" id="res-time-start" value="20:00" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1.5">Duración (Horas)</label>
+                    <select id="res-duration" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500">
+                      <option value="1">1 Hora</option>
+                      <option value="2" selected>2 Horas</option>
+                      <option value="3">3 Horas</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" class="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm transition shadow-lg shadow-emerald-950/50">
+                  Confirmar Reserva
+                </button>
+              </form>
+            </div>
+
+            <!-- Lista de Reservas del Día (8 cols) -->
+            <div class="lg:col-span-8 bg-slateLounge-900 border border-slate-800 rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h2 class="text-base font-bold text-white">Agenda de Reservas de Hoy</h2>
+                  <p class="text-xs text-slate-400">Reservas confirmadas para la sucursal activa</p>
+                </div>
+                <span class="px-3 py-1 rounded-full bg-slate-800 text-xs font-medium text-emerald-400 border border-slate-700">Hoy • Turno Noche</span>
+              </div>
+
+              <div id="reservations-list" class="space-y-3">
+                <!-- Tarjetas de reserva dinámicas -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 6: ARQUEO Y CIERRE DE CAJA                          -->
+        <!-- ========================================================= -->
+        <section id="view-caja" class="view-section hidden max-w-4xl mx-auto space-y-6">
+          <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-slate-800">
+              <div>
+                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400">Turno Operativo Abierto</span>
+                <h2 class="text-xl font-bold text-white mt-0.5">Arqueo y Cierre de Caja</h2>
+                <p id="caja-branch-label" class="text-xs text-slate-400">Sucursal Centro - Cochabamba</p>
+              </div>
+              <div class="px-3.5 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs">
+                <span class="text-slate-400">Estado:</span> <strong id="caja-status-text" class="text-emerald-400">Caja Abierta</strong>
+              </div>
+            </div>
+
+            <!-- Desglose Financiero del Sistema -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-6">
+              <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+                <p class="text-xs text-slate-400">Monto Apertura (Base Inicial)</p>
+                <p id="caja-base-amount" class="text-xl font-bold font-mono text-white mt-1">Bs. 200.00</p>
+              </div>
+              <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+                <p class="text-xs text-slate-400">Ingresos por Alquiler de Mesas</p>
+                <p id="caja-tables-income" class="text-xl font-bold font-mono text-amber-400 mt-1">Bs. 0.00</p>
+              </div>
+              <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800">
+                <p class="text-xs text-slate-400">Ingresos por Ventas POS</p>
+                <p id="caja-pos-income" class="text-xl font-bold font-mono text-sky-400 mt-1">Bs. 0.00</p>
+              </div>
+              <div class="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/40">
+                <p class="text-xs text-emerald-300 font-semibold">TOTAL ESPERADO EN CAJA</p>
+                <p id="caja-expected-total" class="text-2xl font-extrabold font-mono text-emerald-400 mt-1">Bs. 200.00</p>
+              </div>
+            </div>
+
+            <!-- Declaración de Efectivo Físico -->
+            <div class="bg-slate-800/40 border border-slate-700/70 rounded-2xl p-5 space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                <div>
+                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">Efectivo Físico Declarado (Bs.)</label>
+                  <input type="number" step="0.50" id="caja-declared-input" oninput="calculateCashDiff()" placeholder="Ingrese monto contado en caja..." class="w-full bg-slate-900 border border-slate-600 rounded-xl px-4 py-3 text-lg font-mono font-bold text-white focus:outline-none focus:border-emerald-500">
+                </div>
+                <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
+                  <p class="text-xs text-slate-400">Resultado del Cuadre</p>
+                  <p id="caja-diff-amount" class="text-xl font-extrabold font-mono text-slate-300 mt-1">Bs. 0.00</p>
+                  <p id="caja-diff-label" class="text-xs font-medium text-slate-400 mt-0.5">Ingresa el efectivo contado para calcular</p>
+                </div>
+              </div>
+
+              <div class="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+                <button onclick="executeCashClose()" class="px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg">
+                  <i data-lucide="lock" class="w-4 h-4"></i> Ejecutar Cierre de Turno
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 7: GESTIÓN DE SUCURSALES (ADMIN GENERAL)            -->
+        <!-- ========================================================= -->
+        <section id="view-sucursales" class="view-section hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slateLounge-900 border border-slate-800 p-5 rounded-2xl">
+            <div>
+              <h2 class="text-lg font-bold text-white">Gestión Multi-Sucursal Cadena Bola8</h2>
+              <p class="text-xs text-slate-400">Administración centralizada de locales, capacidad de mesas e ingresos consolidados.</p>
+            </div>
+            <button onclick="openNewBranchModal()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 transition">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i> Registrar Nueva Sucursal
+            </button>
+          </div>
+
+          <div id="branches-grid" class="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <!-- Tarjetas de sucursales dinámicas -->
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 8: GESTIÓN DE USUARIOS (SOLO ADMIN GENERAL)         -->
+        <!-- ========================================================= -->
+        <section id="view-usuarios" class="view-section hidden space-y-6">
+          <!-- KPIs de Usuarios -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">Usuarios Activos</p>
+                <p id="kpi-users-active" class="text-2xl font-extrabold text-emerald-400 font-mono mt-1">0</p>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                <i data-lucide="user-check" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">Admins de Sucursal</p>
+                <p id="kpi-users-admins" class="text-2xl font-extrabold text-sky-400 font-mono mt-1">0</p>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center">
+                <i data-lucide="shield" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">Cajeros / Operadores</p>
+                <p id="kpi-users-cashiers" class="text-2xl font-extrabold text-amber-400 font-mono mt-1">0</p>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                <i data-lucide="users" class="w-5 h-5"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Barra de Filtros y Botón Crear Usuario -->
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slateLounge-900 border border-slate-800 p-5 rounded-2xl">
+            <div class="flex flex-wrap items-center gap-3 flex-1">
+              <div class="relative flex-1 min-w-[200px] max-w-xs">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input type="text" id="users-search-input" oninput="renderUsers()" placeholder="Buscar por nombre o correo..." class="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+              </div>
+              <select id="users-role-filter" onchange="renderUsers()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                <option value="all">Todos los Roles</option>
+                <option value="admin_general">Administrador General</option>
+                <option value="admin_sucursal">Admin de Sucursal</option>
+                <option value="cajero">Cajero / Operador</option>
+              </select>
+              <select id="users-branch-filter" onchange="renderUsers()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                <option value="all">Todas las Sucursales</option>
+              </select>
+            </div>
+            <button onclick="openUserModal()" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 transition self-start lg:self-auto">
+              <i data-lucide="user-plus" class="w-4 h-4"></i> Nuevo Usuario
+            </button>
+          </div>
+
+          <!-- Tabla de Usuarios -->
+          <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-800 bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th class="py-3.5 px-5">Usuario</th>
+                    <th class="py-3.5 px-5">Rol Asignado</th>
+                    <th class="py-3.5 px-5">Sucursal</th>
+                    <th class="py-3.5 px-5">PIN Acceso</th>
+                    <th class="py-3.5 px-5">Estado</th>
+                    <th class="py-3.5 px-5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody id="users-tbody" class="divide-y divide-slate-800/80 text-sm">
+                  <!-- Dinámico -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 9: HISTORIAL DE OPERACIONES Y RECIBOS DEL DÍA       -->
+        <!-- ========================================================= -->
+        <section id="view-historial" class="view-section hidden space-y-6">
+          <!-- KPIs Resumen del Día -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">Total Recaudado (Filtro)</p>
+                <p id="hist-kpi-total" class="text-2xl font-extrabold text-emerald-400 font-mono mt-1">Bs. 0.00</p>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+                <i data-lucide="banknote" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">Recibos Emitidos</p>
+                <p id="hist-kpi-count" class="text-2xl font-extrabold text-white font-mono mt-1">0</p>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center">
+                <i data-lucide="receipt" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+              <div>
+                <p class="text-xs text-slate-400 uppercase font-semibold">Ticket Promedio</p>
+                <p id="hist-kpi-avg" class="text-2xl font-extrabold text-amber-400 font-mono mt-1">Bs. 0.00</p>
+              </div>
+              <div class="w-11 h-11 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                <i data-lucide="trending-up" class="w-5 h-5"></i>
+              </div>
+            </div>
+          </div>
+
+          <!-- Filtros de Historial -->
+          <div class="flex flex-wrap items-center justify-between gap-3 bg-slateLounge-900 border border-slate-800 p-4 rounded-2xl">
+            <div class="flex flex-wrap items-center gap-2.5">
+              <select id="hist-date-filter" onchange="renderHistory()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-white focus:outline-none">
+                <option value="Hoy">Fecha: Hoy</option>
+                <option value="Ayer">Fecha: Ayer</option>
+                <option value="Todas">Todas las Fechas</option>
+              </select>
+              <select id="hist-branch-filter" onchange="renderHistory()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-white focus:outline-none">
+                <option value="current">Sucursal Activa</option>
+                <option value="all">Todas las Sucursales</option>
+              </select>
+              <select id="hist-type-filter" onchange="renderHistory()" class="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-white focus:outline-none">
+                <option value="all">Tipo: Todos</option>
+                <option value="Mesa + Consumo">Mesa + Consumo</option>
+                <option value="Venta Directa POS">Venta Directa POS</option>
+              </select>
+            </div>
+            <span class="text-xs text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="printer" class="w-4 h-4 text-emerald-400"></i> Haz clic en <strong>Ver Ticket / PDF</strong> para imprimir
+            </span>
+          </div>
+
+          <!-- Tabla de Recibos -->
+          <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-800 bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th class="py-3.5 px-5">N° Recibo</th>
+                    <th class="py-3.5 px-5">Fecha / Hora</th>
+                    <th class="py-3.5 px-5">Sucursal</th>
+                    <th class="py-3.5 px-5">Concepto / Mesa</th>
+                    <th class="py-3.5 px-5">Cajero</th>
+                    <th class="py-3.5 px-5">Método</th>
+                    <th class="py-3.5 px-5">Total</th>
+                    <th class="py-3.5 px-5 text-right">Comprobante</th>
+                  </tr>
+                </thead>
+                <tbody id="history-tbody" class="divide-y divide-slate-800/80 text-sm">
+                  <!-- Dinámico -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================================= -->
+        <!-- VISTA 10: REPORTES FINANCIEROS Y CONTABLES                -->
+        <!-- ========================================================= -->
+        <section id="view-reportes" class="view-section hidden space-y-6">
+          <!-- Controles Superiores de Contabilidad -->
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slateLounge-900 border border-slate-800 p-5 rounded-2xl">
+            <div class="flex flex-wrap items-center gap-2">
+              <button onclick="setReportPeriod('diario')" class="rep-period-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950">Diario (Hoy)</button>
+              <button onclick="setReportPeriod('semanal')" class="rep-period-btn px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Semanal (7 días)</button>
+              <button onclick="setReportPeriod('mensual')" class="rep-period-btn px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Mensual</button>
+              <button onclick="setReportPeriod('anual')" class="rep-period-btn px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Anual</button>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <select id="rep-branch-filter" onchange="renderReports()" class="bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-xs font-medium text-white focus:outline-none">
+                <option value="all">Consolidado: Todas las Sucursales</option>
+              </select>
+              <button onclick="exportReportCSV()" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg transition cursor-pointer">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar Contabilidad (CSV)
+              </button>
+            </div>
+          </div>
+
+          <!-- 5 Métricas Contables Clave -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4">
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">Ingresos Brutos</p>
+              <p id="rep-kpi-gross" class="text-xl font-extrabold text-emerald-400 font-mono mt-1">Bs. 0.00</p>
+              <p class="text-[11px] text-emerald-500 mt-1">+12.4% vs período ant.</p>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4">
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">Alquiler de Mesas</p>
+              <p id="rep-kpi-tables" class="text-xl font-extrabold text-amber-400 font-mono mt-1">Bs. 0.00</p>
+              <p id="rep-kpi-tables-pct" class="text-[11px] text-slate-400 mt-1">0% del ingreso total</p>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4">
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">Ventas POS / Barra</p>
+              <p id="rep-kpi-pos" class="text-xl font-extrabold text-sky-400 font-mono mt-1">Bs. 0.00</p>
+              <p id="rep-kpi-pos-pct" class="text-[11px] text-slate-400 mt-1">0% del ingreso total</p>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4">
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">Utilidad Neta Est.</p>
+              <p id="rep-kpi-margin" class="text-xl font-extrabold text-purple-400 font-mono mt-1">Bs. 0.00</p>
+              <p class="text-[11px] text-slate-400 mt-1">Margen operativo ~68%</p>
+            </div>
+            <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl p-4">
+              <p class="text-[11px] text-slate-400 uppercase font-semibold">Ticket Promedio</p>
+              <p id="rep-kpi-ticket" class="text-xl font-extrabold text-white font-mono mt-1">Bs. 0.00</p>
+              <p class="text-[11px] text-slate-400 mt-1">Por sesión / venta</p>
+            </div>
+          </div>
+
+          <!-- Gráficos Visuales Comparativos -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Gráfico Barras Evolución (7 cols) -->
+            <div class="lg:col-span-7 bg-slateLounge-900 border border-slate-800 rounded-2xl p-5">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <h3 class="text-sm font-bold text-white">Evolución de Ingresos: Mesas vs. POS</h3>
+                  <p class="text-xs text-slate-400">Comparativa contable por tramo del período</p>
+                </div>
+                <div class="flex items-center gap-3 text-[11px]">
+                  <span class="flex items-center gap-1.5 text-amber-400"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500"></span> Mesas</span>
+                  <span class="flex items-center gap-1.5 text-sky-400"><span class="w-2.5 h-2.5 rounded-sm bg-sky-500"></span> POS</span>
+                </div>
+              </div>
+              <div id="rep-bars-chart" class="h-56 flex items-end justify-between gap-2 pt-6 pb-2 px-2 border-b border-slate-800">
+                <!-- Barras dinámicas -->
+              </div>
+            </div>
+
+            <!-- Participación por Sucursal (5 cols) -->
+            <div class="lg:col-span-5 bg-slateLounge-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white">Rendimiento por Sucursal</h3>
+                <p class="text-xs text-slate-400 mb-5">Participación porcentual en los ingresos de la cadena</p>
+                <div id="rep-branches-breakdown" class="space-y-4">
+                  <!-- Barras de progreso por sucursal -->
+                </div>
+              </div>
+              <div class="mt-6 pt-4 border-t border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+                <span>Impuesto / IVA configurado:</span>
+                <strong id="rep-tax-info" class="text-white font-mono">13% Incluido</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Libro Diario / Resumen Contable -->
+          <div class="bg-slateLounge-900 border border-slate-800 rounded-2xl overflow-hidden">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white">Libro Diario Contable (Auditoría)</h3>
+              <span class="text-xs text-slate-400">Cifras expresadas en moneda activa</span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="border-b border-slate-800 bg-slate-950/60 text-[11px] uppercase tracking-wider text-slate-400">
+                    <th class="py-3 px-5">Período / Fecha</th>
+                    <th class="py-3 px-5">Sucursal</th>
+                    <th class="py-3 px-5">Ingresos Mesas</th>
+                    <th class="py-3 px-5">Ingresos POS</th>
+                    <th class="py-3 px-5">Impuesto Est.</th>
+                    <th class="py-3 px-5 text-right">Total Neto</th>
+                  </tr>
+                </thead>
+                <tbody id="rep-ledger-tbody" class="divide-y divide-slate-800/80 text-xs font-mono">
+                  <!-- Filas contables -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- ========================================================= -->
+  <!-- PANEL LATERAL DESLIZABLE DE CONFIGURACIÓN (DRAWER)        -->
+  <!-- ========================================================= -->
+  <div id="settings-overlay" onclick="closeSettingsDrawer()" class="fixed inset-0 bg-black/70 z-50 hidden backdrop-blur-sm"></div>
+  <aside id="settings-drawer" class="fixed inset-y-0 left-0 z-50 w-80 max-w-full bg-slateLounge-900 border-r border-slate-800 shadow-2xl transform -translate-x-full transition-transform duration-300 flex flex-col">
+    <div class="h-16 px-5 border-b border-slate-800 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <i data-lucide="settings" class="w-5 h-5 text-emerald-400"></i>
+        <h3 class="font-bold text-white text-sm" data-i18n="settings_title">Configuración del Sistema</h3>
+      </div>
+      <button onclick="closeSettingsDrawer()" class="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+    </div>
+
+    <div class="flex-1 p-5 space-y-6 overflow-y-auto">
+      <!-- Tema Visual -->
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5" data-i18n="settings_theme">Apariencia / Tema</label>
+        <div class="grid grid-cols-2 gap-2.5">
+          <button onclick="setTheme('dark')" id="btn-theme-dark" class="py-2.5 px-3 rounded-xl border border-emerald-500 bg-emerald-500/15 text-emerald-400 text-xs font-bold flex items-center justify-center gap-2">
+            <i data-lucide="moon" class="w-4 h-4"></i> Oscuro Lounge
+          </button>
+          <button onclick="setTheme('light')" id="btn-theme-light" class="py-2.5 px-3 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center gap-2">
+            <i data-lucide="sun" class="w-4 h-4"></i> Claro Ejecutivo
+          </button>
+        </div>
+      </div>
+
+      <!-- Idioma de Interfaz -->
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5" data-i18n="settings_lang">Idioma de Interfaz</label>
+        <select id="setting-lang-select" onchange="setLanguage(this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-white focus:outline-none focus:border-emerald-500">
+          <option value="es">🇧🇴 Español (Latinoamérica)</option>
+          <option value="en">🇺🇸 English (International)</option>
+        </select>
+      </div>
+
+      <!-- Moneda y Conversión -->
+      <div>
+        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2.5" data-i18n="settings_currency">Moneda del Sistema</label>
+        <select id="setting-currency-select" onchange="setCurrency(this.value)" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-white focus:outline-none focus:border-emerald-500">
+          <option value="BOB">Bolivianos (Bs.) — Base 1.00</option>
+          <option value="USD">Dólares Americanos (USD $) — TC 6.96</option>
+          <option value="EUR">Euros (EUR €) — TC 7.55</option>
+        </select>
+        <p class="text-[11px] text-slate-500 mt-1.5">Actualiza automáticamente tarifas, POS, cajas y reportes contables.</p>
+      </div>
+
+      <!-- Parámetros de Ticket y Caja -->
+      <div class="pt-4 border-t border-slate-800 space-y-4">
+        <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Facturación y Ticket PDF</p>
+        <div>
+          <label class="block text-xs text-slate-300 mb-1">Nombre Comercial en Ticket</label>
+          <input type="text" id="setting-salon-name" value="SALÓN DE BILLAR BOLA8" onchange="updateSalonSettings()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-300 mb-1">IVA / Impuesto (%)</label>
+            <input type="number" id="setting-tax-rate" value="13" min="0" max="30" onchange="updateSalonSettings()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-300 mb-1">Formato Impresión</label>
+            <select id="setting-print-size" onchange="updateSalonSettings()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white">
+              <option value="80mm">Ticket 80mm</option>
+              <option value="A4">Hoja A4</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="p-4 border-t border-slate-800">
+      <button onclick="closeSettingsDrawer()" class="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">
+        Guardar y Aplicar Cambios
+      </button>
+    </div>
+  </aside>
+
+  <!-- ========================================================= -->
+  <!-- MODALES INTERACTIVOS                                      -->
+  <!-- ========================================================= -->
+
+  <!-- Modal Ticket / Comprobante de Cobro y PDF -->
+  <div id="modal-checkout" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-slateLounge-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800 no-print">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">8</div>
+          <h3 id="modal-receipt-title" class="font-bold text-white">Comprobante de Venta • Bola8</h3>
+        </div>
+        <button onclick="closeModal('modal-checkout')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      
+      <!-- Área imprimible en PDF -->
+      <div id="print-receipt-area" class="my-4 bg-white text-slate-900 p-5 rounded-xl border border-slate-300 font-mono text-xs space-y-2 shadow-inner">
+        <div id="receipt-content">
+          <!-- Detalle del ticket -->
+        </div>
+      </div>
+
+      <!-- Botones de Acción (Cobro nuevo vs Reimpresión desde Historial) -->
+      <div id="receipt-modal-actions" class="grid grid-cols-2 gap-2.5 mt-4 no-print">
+        <!-- Dinámico -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Crear / Editar Usuario -->
+  <div id="modal-user" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-slateLounge-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 id="modal-user-title" class="font-bold text-white">Registrar Nuevo Usuario</h3>
+        <button onclick="closeModal('modal-user')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form onsubmit="saveUser(event)" class="mt-4 space-y-4">
+        <input type="hidden" id="edit-user-id" value="">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Nombre Completo</label>
+          <input type="text" id="user-name" required placeholder="Ej. Carla Méndez" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Correo Electrónico / Usuario</label>
+          <input type="email" id="user-email" required placeholder="carla.mendez@bola8.bo" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Rol en el Sistema</label>
+            <select id="user-role" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white">
+              <option value="admin_general">Administrador General</option>
+              <option value="admin_sucursal">Admin de Sucursal</option>
+              <option value="cajero" selected>Cajero / Operador</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Sucursal Asignada</label>
+            <select id="user-branch" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white">
+              <!-- Rellenado dinámicamente -->
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">PIN de Caja (4 dígitos)</label>
+            <input type="text" id="user-pin" maxlength="4" pattern="[0-9]{4}" value="1234" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2 text-sm font-mono text-white">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Estado</label>
+            <select id="user-status" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
+              <option value="activo">Activo</option>
+              <option value="inactivo">Inactivo</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-user')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white">Guardar Usuario</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Crear Nueva Mesa -->
+  <div id="modal-new-table" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-slateLounge-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="font-bold text-white">Crear Nueva Mesa en Sucursal</h3>
+        <button onclick="closeModal('modal-new-table')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form onsubmit="createNewTable(event)" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Nombre o Número de Mesa</label>
+          <input type="text" id="new-table-name" required placeholder="Ej. Mesa 7 - VIP" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Tipo / Modalidad</label>
+          <select id="new-table-type" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+            <option value="Pool Profesional">Pool Profesional</option>
+            <option value="Pool Estándar">Pool Estándar</option>
+            <option value="Carambola 3 Bandas">Carambola 3 Bandas</option>
+            <option value="Snooker">Snooker</option>
+            <option value="Sala VIP Privada">Sala VIP Privada</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Tarifa por Minuto (Bs.)</label>
+          <input type="number" step="0.05" min="0.10" id="new-table-rate" value="0.60" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono text-white">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-new-table')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white">Guardar Mesa</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Nuevo Producto -->
+  <div id="modal-new-product" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-slateLounge-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="font-bold text-white">Registrar Producto en Inventario</h3>
+        <button onclick="closeModal('modal-new-product')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form onsubmit="createNewProduct(event)" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Nombre del Producto</label>
+          <input type="text" id="new-prod-name" required placeholder="Ej. Cerveza Huari 620ml" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Categoría</label>
+            <select id="new-prod-cat" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white">
+              <option value="Cervezas">Cervezas</option>
+              <option value="Bebidas">Bebidas</option>
+              <option value="Snacks">Snacks</option>
+              <option value="Accesorios">Accesorios</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Precio Venta (Bs.)</label>
+            <input type="number" step="0.50" min="1" id="new-prod-price" value="18.00" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono text-white">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Stock Inicial</label>
+          <input type="number" min="1" id="new-prod-stock" value="24" required class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm font-mono text-white">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-new-product')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white">Registrar Producto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Nueva Sucursal -->
+  <div id="modal-new-branch" class="fixed inset-0 bg-black/75 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
+    <div class="bg-slateLounge-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="font-bold text-white">Registrar Nueva Sucursal Bola8</h3>
+        <button onclick="closeModal('modal-new-branch')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form onsubmit="createNewBranch(event)" class="mt-4 space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Nombre de la Sucursal</label>
+          <input type="text" id="new-branch-name" required placeholder="Ej. Sucursal Quillacollo" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Dirección Física</label>
+          <input type="text" id="new-branch-address" required placeholder="Ej. Av. Blanco Galindo Km 12" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-300 mb-1">Teléfono de Contacto</label>
+          <input type="text" id="new-branch-phone" required placeholder="Ej. 4-4321987" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-white">
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeModal('modal-new-branch')" class="px-4 py-2 rounded-xl bg-slate-800 text-xs text-slate-300">Cancelar</button>
+          <button type="submit" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white">Crear Sucursal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Contenedor Notificaciones Toast -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- ========================================================= -->
+  <!-- LÓGICA DE APLICACIÓN EN MEMORIA (JAVASCRIPT PURO)         -->
+  <!-- ========================================================= -->
+  <script>
+    // =========================================================================
+    // 1. ESTADO GLOBAL EN MEMORIA (DATOS REALISTAS + USUARIOS + RECIBOS + CONFIG)
+    // =========================================================================
+    const state = {
+      currentBranchId: 'suc-1',
+      currentRole: 'admin_general', // 'admin_general' | 'admin_sucursal' | 'cajero'
+      currentView: 'dashboard',
+      selectedPosTableId: 'm-1',
+      posCategoryFilter: 'Todas',
+      reportPeriod: 'diario',
+      directSaleCart: [],
+      settings: {
+        theme: 'dark',
+        lang: 'es',
+        currency: 'BOB', // 'BOB' | 'USD' | 'EUR'
+        salonName: 'SALÓN DE BILLAR BOLA8',
+        taxRate: 13,
+        printSize: '80mm'
+      },
+      users: [
+        { id: 'u-1', name: 'Dennis Alejandro Condori', email: 'admin@bola8.bo', role: 'admin_general', branchId: 'all', pin: '8888', active: true },
+        { id: 'u-2', name: 'Carlos Mendoza Rivas', email: 'cmendoza@bola8.bo', role: 'admin_sucursal', branchId: 'suc-1', pin: '4512', active: true },
+        { id: 'u-3', name: 'Sofía Fernández Paz', email: 'sfernandez@bola8.bo', role: 'cajero', branchId: 'suc-1', pin: '1024', active: true },
+        { id: 'u-4', name: 'Jorge Luis Mamani', email: 'jmamani@bola8.bo', role: 'admin_sucursal', branchId: 'suc-2', pin: '3390', active: true },
+        { id: 'u-5', name: 'Andrea Rojas Villarroel', email: 'arojas@bola8.bo', role: 'cajero', branchId: 'suc-2', pin: '2219', active: true },
+        { id: 'u-6', name: 'Luis Fernando Arce', email: 'larce@bola8.bo', role: 'cajero', branchId: 'suc-3', pin: '7741', active: false }
+      ],
+      receiptsHistory: [
+        {
+          id: 'B8-1041',
+          dateLabel: 'Hoy',
+          timestamp: '18:45',
+          branchId: 'suc-1',
+          type: 'Mesa + Consumo',
+          concept: 'Mesa 02 (Pool Profesional)',
+          cashier: 'Sofía Fernández Paz',
+          method: 'Efectivo',
+          minutes: 75,
+          ratePerMin: 0.60,
+          rentalTotal: 45.00,
+          items: [
+            { name: 'Cerveza Paceña 620ml', qty: 3, price: 20.00 },
+            { name: 'Nachos con Queso', qty: 1, price: 25.00 }
+          ],
+          total: 130.00
+        },
+        {
+          id: 'B8-1042',
+          dateLabel: 'Hoy',
+          timestamp: '19:20',
+          branchId: 'suc-1',
+          type: 'Venta Directa POS',
+          concept: 'Consumo en Barra',
+          cashier: 'Sofía Fernández Paz',
+          method: 'QR / Transferencia',
+          minutes: 0,
+          ratePerMin: 0,
+          rentalTotal: 0,
+          items: [
+            { name: 'Coca-Cola 2L', qty: 2, price: 15.00 },
+            { name: 'Papas Pringles Original', qty: 1, price: 18.00 }
+          ],
+          total: 48.00
+        },
+        {
+          id: 'B8-1043',
+          dateLabel: 'Hoy',
+          timestamp: '20:10',
+          branchId: 'suc-2',
+          type: 'Mesa + Consumo',
+          concept: 'Mesa VIP 01',
+          cashier: 'Andrea Rojas Villarroel',
+          method: 'Efectivo',
+          minutes: 90,
+          ratePerMin: 1.10,
+          rentalTotal: 99.00,
+          items: [
+            { name: 'Balde 6 Cervezas Corona', qty: 1, price: 95.00 }
+          ],
+          total: 194.00
+        },
+        {
+          id: 'B8-1039',
+          dateLabel: 'Ayer',
+          timestamp: '22:30',
+          branchId: 'suc-1',
+          type: 'Mesa + Consumo',
+          concept: 'Mesa 03 (Carambola)',
+          cashier: 'Carlos Mendoza Rivas',
+          method: 'Efectivo',
+          minutes: 120,
+          ratePerMin: 0.75,
+          rentalTotal: 90.00,
+          items: [
+            { name: 'Cerveza Huari Miel', qty: 4, price: 22.00 }
+          ],
+          total: 178.00
+        }
+      ],
+      branches: [
+        {
+          id: 'suc-1',
+          name: 'Sucursal Centro - Cochabamba',
+          address: 'Av. Heroínas esq. Ayacucho #412',
+          phone: '4-4528910',
+          active: true,
+          cashBase: 200.00,
+          rentalIncomeToday: 185.50,
+          posIncomeToday: 240.00,
+          tables: [
+            { id: 'm-1', name: 'Mesa 01', type: 'Pool Profesional', ratePerMin: 0.60, status: 'ocupada', elapsedSeconds: 2740, isPaused: false, cart: [{ productId: 'p-1', name: 'Cerveza Paceña 620ml', price: 20.00, qty: 2 }, { productId: 'p-5', name: 'Papas Pringles Original', price: 18.00, qty: 1 }] },
+            { id: 'm-2', name: 'Mesa 02', type: 'Pool Profesional', ratePerMin: 0.60, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+            { id: 'm-3', name: 'Mesa 03', type: 'Carambola 3 Bandas', ratePerMin: 0.75, status: 'ocupada', elapsedSeconds: 1425, isPaused: false, cart: [{ productId: 'p-3', name: 'Coca-Cola 2L', price: 15.00, qty: 1 }] },
+            { id: 'm-4', name: 'Mesa 04', type: 'Pool Estándar', ratePerMin: 0.45, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+            { id: 'm-5', name: 'Mesa 05', type: 'Snooker Oficial', ratePerMin: 0.90, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+            { id: 'm-6', name: 'Mesa 06', type: 'Pool Estándar', ratePerMin: 0.45, status: 'mantenimiento', elapsedSeconds: 0, isPaused: false, cart: [] },
+          ],
+          inventory: [
+            { id: 'p-1', name: 'Cerveza Paceña 620ml', category: 'Cervezas', price: 20.00, stock: 34, minStock: 12 },
+            { id: 'p-2', name: 'Cerveza Huari Miel', category: 'Cervezas', price: 22.00, stock: 8, minStock: 10 },
+            { id: 'p-3', name: 'Coca-Cola 2L', category: 'Bebidas', price: 15.00, stock: 19, minStock: 8 },
+            { id: 'p-4', name: 'Agua Vital 600ml', category: 'Bebidas', price: 7.00, stock: 25, minStock: 10 },
+            { id: 'p-5', name: 'Papas Pringles Original', category: 'Snacks', price: 18.00, stock: 5, minStock: 8 },
+            { id: 'p-6', name: 'Nachos con Queso', category: 'Snacks', price: 25.00, stock: 14, minStock: 6 },
+            { id: 'p-7', name: 'Alquiler Taco Profesional', category: 'Accesorios', price: 10.00, stock: 10, minStock: 3 },
+            { id: 'p-8', name: 'Tiza Master Azul (Unidad)', category: 'Accesorios', price: 5.00, stock: 40, minStock: 10 },
+          ],
+          reservations: [
+            { id: 'r-1', client: 'Alejandro Vargas', phone: '71784512', tableId: 'm-2', tableName: 'Mesa 02', startTime: '21:00', durationHours: 2 },
+            { id: 'r-2', client: 'Valeria Torrico', phone: '65390122', tableId: 'm-5', tableName: 'Mesa 05', startTime: '22:00', durationHours: 1 },
+          ]
+        },
+        {
+          id: 'suc-2',
+          name: 'Sucursal Norte - Av. América',
+          address: 'Av. América Oeste #1145',
+          phone: '4-4419022',
+          active: true,
+          cashBase: 250.00,
+          rentalIncomeToday: 310.00,
+          posIncomeToday: 415.00,
+          tables: [
+            { id: 'n-1', name: 'Mesa VIP 01', type: 'Sala VIP Privada', ratePerMin: 1.10, status: 'ocupada', elapsedSeconds: 3890, isPaused: false, cart: [{ productId: 'np-1', name: 'Balde 6 Cervezas Corona', price: 95.00, qty: 1 }] },
+            { id: 'n-2', name: 'Mesa 02', type: 'Pool Profesional', ratePerMin: 0.65, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+            { id: 'n-3', name: 'Mesa 03', type: 'Pool Profesional', ratePerMin: 0.65, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+            { id: 'n-4', name: 'Mesa 04', type: 'Carambola 3 Bandas', ratePerMin: 0.80, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+          ],
+          inventory: [
+            { id: 'np-1', name: 'Balde 6 Cervezas Corona', category: 'Cervezas', price: 95.00, stock: 12, minStock: 5 },
+            { id: 'np-2', name: 'Cerveza Paceña Lata', category: 'Cervezas', price: 14.00, stock: 42, minStock: 15 },
+            { id: 'np-3', name: 'Red Bull 250ml', category: 'Bebidas', price: 18.00, stock: 6, minStock: 10 },
+            { id: 'np-4', name: 'Alitas BBQ (12 unid)', category: 'Snacks', price: 45.00, stock: 9, minStock: 4 },
+          ],
+          reservations: [
+            { id: 'nr-1', client: 'Mauricio Rojas', phone: '76411290', tableId: 'n-2', tableName: 'Mesa 02', startTime: '20:30', durationHours: 2 },
+          ]
+        },
+        {
+          id: 'suc-3',
+          name: 'Sucursal Sur - Petrolera',
+          address: 'Av. Petrolera Km 3.5',
+          phone: '4-4761120',
+          active: true,
+          cashBase: 150.00,
+          rentalIncomeToday: 95.00,
+          posIncomeToday: 120.00,
+          tables: [
+            { id: 's-1', name: 'Mesa 01', type: 'Pool Estándar', ratePerMin: 0.40, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+            { id: 's-2', name: 'Mesa 02', type: 'Pool Estándar', ratePerMin: 0.40, status: 'ocupada', elapsedSeconds: 920, isPaused: false, cart: [] },
+            { id: 's-3', name: 'Mesa 03', type: 'Pool Profesional', ratePerMin: 0.55, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] },
+          ],
+          inventory: [
+            { id: 'sp-1', name: 'Cerveza Paceña 620ml', category: 'Cervezas', price: 18.00, stock: 28, minStock: 10 },
+            { id: 'sp-2', name: 'Fanta 2L', category: 'Bebidas', price: 14.00, stock: 12, minStock: 6 },
+            { id: 'sp-3', name: 'Maní Salado', category: 'Snacks', price: 8.00, stock: 4, minStock: 8 },
+          ],
+          reservations: []
+        }
+      ]
+    };
+
+    // =========================================================================
+    // 2. HELPERS, MONEDA MULTI-DIVISA, I18N Y FORMATEADORES
+    // =========================================================================
+    const currencyRates = {
+      BOB: { symbol: 'Bs. ', rate: 1, code: 'Bs.' },
+      USD: { symbol: '$ ', rate: 1 / 6.96, code: 'USD' },
+      EUR: { symbol: '€ ', rate: 1 / 7.55, code: 'EUR' }
+    };
+
+    const i18nDict = {
+      es: {
+        nav_ops: 'Operación en Salón',
+        nav_admin: 'Administración y Finanzas',
+        menu_dashboard: 'Dashboard Mesas',
+        menu_pos: 'Control Mesa & POS',
+        menu_reservas: 'Reservas',
+        menu_historial: 'Historial y Recibos',
+        menu_caja: 'Arqueo y Caja',
+        menu_reportes: 'Reportes Financieros',
+        menu_mesas: 'Mesas y Tarifas/Min',
+        menu_inventario: 'Inventario Local',
+        menu_sucursales: 'Sucursales Cadena',
+        menu_usuarios: 'Usuarios y Roles',
+        menu_settings: 'Configuración App',
+        settings_title: 'Configuración del Sistema',
+        settings_theme: 'Apariencia / Tema',
+        settings_lang: 'Idioma de Interfaz',
+        settings_currency: 'Moneda del Sistema'
+      },
+      en: {
+        nav_ops: 'Floor Operations',
+        nav_admin: 'Admin & Accounting',
+        menu_dashboard: 'Tables Dashboard',
+        menu_pos: 'Table Control & POS',
+        menu_reservas: 'Reservations',
+        menu_historial: 'History & Receipts',
+        menu_caja: 'Cash Drawer & Close',
+        menu_reportes: 'Financial Reports',
+        menu_mesas: 'Tables & Rates/Min',
+        menu_inventario: 'Local Inventory',
+        menu_sucursales: 'Chain Branches',
+        menu_usuarios: 'Users & Roles',
+        menu_settings: 'App Settings',
+        settings_title: 'System Settings',
+        settings_theme: 'Theme Appearance',
+        settings_lang: 'Interface Language',
+        settings_currency: 'System Currency'
+      }
+    };
+
+    function getCurrentBranch() {
+      return state.branches.find(b => b.id === state.currentBranchId);
+    }
+
+    function formatBs(amountInBob) {
+      const cfg = currencyRates[state.settings.currency] || currencyRates.BOB;
+      const converted = Number(amountInBob) * cfg.rate;
+      return `${cfg.symbol}${converted.toFixed(2)}`;
+    }
+
+    function formatSecondsToHHMMSS(totalSeconds) {
+      const hrs = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = totalSeconds % 60;
+      return [hrs, mins, secs].map(v => String(v).padStart(2, '0')).join(':');
+    }
+
+    function calculateRentalCost(table) {
+      if (table.status !== 'ocupada' && table.elapsedSeconds === 0) return 0;
+      // Cobro proporcional exacto por minuto transcurrido (mínimo 1 minuto al iniciar)
+      const billableMinutes = Math.max(1, Math.ceil(table.elapsedSeconds / 60));
+      return billableMinutes * table.ratePerMin;
+    }
+
+    function calculateCartTotal(cart) {
+      return cart.reduce((acc, item) => acc + (item.price * item.qty), 0);
+    }
+
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-slate-900 border-emerald-500/60 text-emerald-300',
+        warning: 'bg-slate-900 border-amber-500/60 text-amber-300',
+        error: 'bg-slate-900 border-rose-500/60 text-rose-300',
+        info: 'bg-slate-900 border-sky-500/60 text-sky-300'
+      };
+      const icons = {
+        success: 'check-circle-2',
+        warning: 'alert-triangle',
+        error: 'x-circle',
+        info: 'info'
+      };
+
+      toast.className = `pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl border shadow-xl backdrop-blur-md text-xs font-medium transition-all duration-300 transform translate-y-2 opacity-0 ${colors[type]}`;
+      toast.innerHTML = `<i data-lucide="${icons[type]}" class="w-4 h-4 shrink-0"></i><span>${message}</span>`;
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 3200);
+    }
+
+    // =========================================================================
+    // 3. NAVEGACIÓN, ROLES Y SELECTOR MULTI-SUCURSAL
+    // =========================================================================
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('sidebar-overlay');
+      sidebar.classList.toggle('-translate-x-full');
+      overlay.classList.toggle('hidden');
+    }
+
+    function navigate(viewId) {
+      if ((viewId === 'sucursales' || viewId === 'usuarios') && state.currentRole !== 'admin_general') {
+        showToast('Acceso denegado: Módulo exclusivo del Administrador General.', 'error');
+        return;
+      }
+
+      state.currentView = viewId;
+
+      // Actualizar secciones
+      document.querySelectorAll('.view-section').forEach(sec => sec.classList.add('hidden'));
+      document.getElementById(`view-${viewId}`).classList.remove('hidden');
+
+      // Actualizar estilos botones nav
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        if (btn.dataset.view === viewId) {
+          btn.className = 'nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+        } else {
+          btn.className = 'nav-btn w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all';
+        }
+      });
+
+      // Actualizar título superior
+      const titles = {
+        'dashboard': ['Dashboard Operativo', 'Monitoreo de mesas en tiempo real y métricas del turno'],
+        'pos': ['Control de Mesa & POS', 'Cronómetro individual y punto de venta integrado'],
+        'mesas-admin': ['Mesas y Tarifas por Minuto', 'Configuración dinámica de mesas y precios personalizados'],
+        'inventario': ['Inventario Local', 'Control de existencias y alertas de stock por sucursal'],
+        'reservas': ['Reservas de Mesas', 'Agenda diaria con validación automática de disponibilidad'],
+        'historial': ['Historial y Recibos PDF', 'Auditoría de operaciones del día e impresión de comprobantes'],
+        'caja': ['Arqueo y Cierre de Caja', 'Cuadre financiero del turno operativo'],
+        'reportes': ['Reportes Financieros y Contables', 'Análisis contable diario, semanal, mensual y exportación CSV'],
+        'sucursales': ['Gestión Multi-Sucursal', 'Administración global de los locales de la cadena Bola8'],
+        'usuarios': ['Gestión de Usuarios y Roles', 'Control de accesos para administradores de sucursal y cajeros']
+      };
+      document.getElementById('topbar-title').textContent = titles[viewId][0];
+      document.getElementById('topbar-subtitle').textContent = titles[viewId][1];
+
+      // Cerrar sidebar en móvil
+      if (window.innerWidth < 1024) {
+        document.getElementById('sidebar').classList.add('-translate-x-full');
+        document.getElementById('sidebar-overlay').classList.add('hidden');
+      }
+
+      renderAll();
+    }
+
+    function populateBranchSelector() {
+      const select = document.getElementById('branch-selector');
+      select.innerHTML = state.branches.map(b =>
+        `<option value="${b.id}" class="bg-slate-900 text-white" ${b.id === state.currentBranchId ? 'selected' : ''}>${b.name}</option>`
+      ).join('');
+    }
+
+    function changeBranch(branchId) {
+      state.currentBranchId = branchId;
+      const branch = getCurrentBranch();
+      state.selectedPosTableId = branch.tables[0] ? branch.tables[0].id : 'direct';
+      showToast(`Cambiado a ${branch.name}`, 'info');
+      renderAll();
+    }
+
+    function changeRole(role) {
+      state.currentRole = role;
+      const roleConfig = {
+        admin_general: { initials: 'AG', name: 'Administrador General', scope: 'Acceso Global • Todas las sedes', color: 'bg-amber-500/20 text-amber-400' },
+        admin_sucursal: { initials: 'AS', name: 'Admin de Sucursal', scope: 'Gestión Local • Tarifas e Inventario', color: 'bg-sky-500/20 text-sky-400' },
+        cajero: { initials: 'CJ', name: 'Cajero / Operador', scope: 'Operación • Mesas, POS y Caja', color: 'bg-emerald-500/20 text-emerald-400' }
+      };
+
+      const cfg = roleConfig[role];
+      const avatar = document.getElementById('role-avatar');
+      if (avatar) {
+        avatar.textContent = cfg.initials;
+        avatar.className = `w-9 h-9 rounded-lg ${cfg.color} flex items-center justify-center font-bold text-sm shrink-0`;
+      }
+      const dispName = document.getElementById('role-display-name');
+      const dispScope = document.getElementById('role-display-scope');
+      if (dispName) dispName.textContent = cfg.name;
+      if (dispScope) dispScope.textContent = cfg.scope;
+
+      // Control visibilidad módulos exclusivos de Admin General (Sucursales y Usuarios)
+      ['nav-sucursales', 'nav-usuarios'].forEach(navId => {
+        const el = document.getElementById(navId);
+        if (!el) return;
+        if (role === 'admin_general') {
+          el.classList.remove('opacity-40', 'cursor-not-allowed');
+        } else {
+          el.classList.add('opacity-40', 'cursor-not-allowed');
+        }
+      });
+      if (role !== 'admin_general' && (state.currentView === 'sucursales' || state.currentView === 'usuarios')) {
+        navigate('dashboard');
+      }
+
+      showToast(`Rol simulado: ${cfg.name}`, 'warning');
+      renderAll();
+    }
+
+    // =========================================================================
+    // 4. RENDERIZADO DASHBOARD OPERATIVO (MESAS EN VIVO)
+    // =========================================================================
+    function renderDashboard() {
+      const branch = getCurrentBranch();
+      if (!branch) return;
+
+      const activeTables = branch.tables.filter(t => t.status === 'ocupada');
+      const freeTables = branch.tables.filter(t => t.status === 'libre');
+      const totalIncome = branch.rentalIncomeToday + branch.posIncomeToday;
+      const expectedCash = branch.cashBase + totalIncome;
+
+      document.getElementById('kpi-total-income').textContent = formatBs(totalIncome);
+      document.getElementById('kpi-active-tables').textContent = `${activeTables.length} / ${branch.tables.length}`;
+      document.getElementById('kpi-free-tables').textContent = `${freeTables.length} mesas disponibles ahora`;
+      document.getElementById('kpi-pos-sales').textContent = formatBs(branch.posIncomeToday);
+      document.getElementById('kpi-cash-box').textContent = formatBs(expectedCash);
+      document.getElementById('kpi-cash-base').textContent = `Incluye base inicial (${formatBs(branch.cashBase)})`;
+      document.getElementById('nav-badge-active').textContent = activeTables.length;
+
+      const lowStockCount = branch.inventory.filter(p => p.stock <= p.minStock).length;
+      const stockBadge = document.getElementById('nav-badge-stock');
+      if (lowStockCount > 0) {
+        stockBadge.classList.remove('hidden');
+        stockBadge.textContent = lowStockCount;
+      } else {
+        stockBadge.classList.add('hidden');
+      }
+
+      // Renderizar cuadrícula de mesas
+      const grid = document.getElementById('dashboard-tables-grid');
+      grid.innerHTML = branch.tables.map(table => {
+        const isOccupied = table.status === 'ocupada';
+        const isMaint = table.status === 'mantenimiento';
+        const rentalCost = calculateRentalCost(table);
+        const posCost = calculateCartTotal(table.cart);
+        const subtotal = rentalCost + posCost;
+
+        let cardBorder = 'border-emerald-500/30 hover:border-emerald-500/70';
+        let badgeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">LIBRE</span>`;
+        let feltBg = 'from-emerald-950/40 to-slateLounge-900';
+
+        if (isOccupied) {
+          cardBorder = 'border-amber-500/60 active-table-glow';
+          badgeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>${table.isPaused ? 'PAUSADA' : 'EN JUEGO'}</span>`;
+          feltBg = 'from-amber-950/30 to-slateLounge-900';
+        } else if (isMaint) {
+          cardBorder = 'border-slate-700/70 opacity-75';
+          badgeHtml = `<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-400 border border-slate-700">MANTENIMIENTO</span>`;
+          feltBg = 'from-slate-900 to-slateLounge-900';
+        }
+
+        return `
+          <div class="bg-gradient-to-br ${feltBg} border ${cardBorder} rounded-2xl p-5 flex flex-col justify-between transition-all shadow-lg">
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <h3 class="text-lg font-extrabold text-white">${table.name}</h3>
+                  <p class="text-xs text-slate-400">${table.type}</p>
+                </div>
+                ${badgeHtml}
+              </div>
+
+              <!-- Tarifa por minuto -->
+              <div class="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-[11px] text-slate-300">
+                <i data-lucide="clock" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Tarifa: <strong class="font-mono text-white">${formatBs(table.ratePerMin)}</strong> / min</span>
+              </div>
+
+              <!-- Cronómetro y Desglose -->
+              <div class="my-4 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800/90 flex items-center justify-between">
+                <div>
+                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Tiempo Transcurrido</p>
+                  <p id="card-clock-${table.id}" class="text-2xl font-mono font-bold ${isOccupied ? 'text-amber-400' : 'text-slate-600'} mt-0.5">
+                    ${formatSecondsToHHMMSS(table.elapsedSeconds)}
+                  </p>
+                </div>
+                <div class="text-right">
+                  <p class="text-[10px] uppercase tracking-wider text-slate-500">Cuenta Actual</p>
+                  <p id="card-total-${table.id}" class="text-lg font-mono font-extrabold ${isOccupied ? 'text-emerald-400' : 'text-slate-600'} mt-0.5">
+                    ${formatBs(subtotal)}
+                  </p>
+                  ${posCost > 0 ? `<p class="text-[10px] text-sky-400">+${formatBs(posCost)} POS</p>` : ''}
+                </div>
+              </div>
+            </div>
+
+            <!-- Botones de Acción Rápida -->
+            <div class="grid grid-cols-2 gap-2.5 pt-1">
+              ${isMaint ? `
+                <button onclick="toggleTableMaintenance('${table.id}')" class="col-span-2 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                  <i data-lucide="wrench" class="w-3.5 h-3.5"></i> Habilitar Mesa
+                </button>
+              ` : isOccupied ? `
+                <button onclick="openTableInPos('${table.id}')" class="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+                  <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i> Consumo POS
+                </button>
+                <button onclick="openTableInPos('${table.id}')" class="py-2.5 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+                  <i data-lucide="receipt" class="w-3.5 h-3.5"></i> Ver / Cobrar
+                </button>
+              ` : `
+                <button onclick="startTableTimer('${table.id}')" class="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-950 transition">
+                  <i data-lucide="play" class="w-3.5 h-3.5"></i> Iniciar Tiempo
+                </button>
+                <button onclick="openTableInPos('${table.id}')" class="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                  <i data-lucide="eye" class="w-3.5 h-3.5"></i> Abrir POS
+                </button>
+              `}
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function startTableTimer(tableId) {
+      const branch = getCurrentBranch();
+      const table = branch.tables.find(t => t.id === tableId);
+      if (!table) return;
+      table.status = 'ocupada';
+      table.isPaused = false;
+      if (table.elapsedSeconds === 0) table.elapsedSeconds = 1;
+      showToast(`Cronómetro iniciado en ${table.name} (${formatBs(table.ratePerMin)}/min)`, 'success');
+      renderAll();
+    }
+
+    function openTableInPos(tableId) {
+      state.selectedPosTableId = tableId;
+      navigate('pos');
+    }
+
+    // =========================================================================
+    // 5. RENDERIZADO CONTROL DE MESA Y PUNTO DE VENTA (POS)
+    // =========================================================================
+    function renderPos() {
+      const branch = getCurrentBranch();
+      const selector = document.getElementById('pos-table-selector');
+
+      // Poblar selector de mesas + opción Venta Directa
+      const optionsHtml = branch.tables
+        .filter(t => t.status !== 'mantenimiento')
+        .map(t => `<option value="${t.id}" ${t.id === state.selectedPosTableId ? 'selected' : ''}>${t.name} (${t.type}) — ${t.status === 'ocupada' ? 'OCUPADA' : 'Libre'}</option>`)
+        .join('') + `<option value="direct" ${state.selectedPosTableId === 'direct' ? 'selected' : ''}>🛒 Venta Directa en Barra (Sin Mesa)</option>`;
+      
+      selector.innerHTML = optionsHtml;
+
+      const isDirect = state.selectedPosTableId === 'direct';
+      const table = isDirect ? null : branch.tables.find(t => t.id === state.selectedPosTableId) || branch.tables[0];
+      if (!isDirect && table) state.selectedPosTableId = table.id;
+
+      const badge = document.getElementById('pos-table-status-badge');
+      const timerPanel = document.getElementById('pos-timer-panel');
+
+      let rentalCost = 0;
+      let currentCart = [];
+
+      if (isDirect) {
+        badge.textContent = 'Venta Directa';
+        badge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-sky-500/20 text-sky-400';
+        timerPanel.classList.add('hidden');
+        currentCart = state.directSaleCart;
+      } else if (table) {
+        timerPanel.classList.remove('hidden');
+        currentCart = table.cart;
+        rentalCost = calculateRentalCost(table);
+
+        if (table.status === 'ocupada') {
+          badge.textContent = table.isPaused ? 'Pausada' : 'En Juego';
+          badge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-300';
+        } else {
+          badge.textContent = 'Libre';
+          badge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400';
+        }
+
+        document.getElementById('pos-table-meta').textContent = `${table.type} • Tarifa: ${formatBs(table.ratePerMin)} / min`;
+        document.getElementById('pos-live-clock').textContent = formatSecondsToHHMMSS(table.elapsedSeconds);
+        document.getElementById('pos-live-minutes').textContent = table.status === 'ocupada' ? Math.max(1, Math.ceil(table.elapsedSeconds / 60)) : 0;
+        document.getElementById('pos-live-rental-cost').textContent = formatBs(rentalCost);
+
+        // Controles de tiempo
+        const controls = document.getElementById('pos-timer-controls');
+        if (table.status === 'libre') {
+          controls.innerHTML = `
+            <button onclick="startTableTimer('${table.id}')" class="col-span-2 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-2 transition">
+              <i data-lucide="play" class="w-4 h-4"></i> Iniciar Cronómetro
+            </button>
+          `;
+        } else {
+          controls.innerHTML = `
+            <button onclick="togglePauseTable('${table.id}')" class="py-2.5 px-3 rounded-xl ${table.isPaused ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-amber-600 hover:bg-amber-500'} text-white text-xs font-bold flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="${table.isPaused ? 'play' : 'pause'}" class="w-4 h-4"></i> ${table.isPaused ? 'Reanudar' : 'Pausar'}
+            </button>
+            <button onclick="resetTableTimer('${table.id}')" class="py-2.5 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reiniciar
+            </button>
+          `;
+        }
+      }
+
+      // Renderizar lista de consumos en cuenta
+      const cartList = document.getElementById('pos-cart-list');
+      document.getElementById('pos-items-count').textContent = `${currentCart.reduce((a, b) => a + b.qty, 0)} ítems`;
+
+      if (currentCart.length === 0) {
+        cartList.innerHTML = `<p class="py-6 text-center text-xs text-slate-500">Sin productos agregados aún</p>`;
+      } else {
+        cartList.innerHTML = currentCart.map(item => `
+          <div class="py-2.5 flex items-center justify-between gap-2 text-xs">
+            <div class="min-w-0 flex-1">
+              <p class="font-semibold text-slate-200 truncate">${item.name}</p>
+              <p class="text-[11px] text-slate-500">${formatBs(item.price)} c/u</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="removeProductFromCart('${item.productId}')" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 flex items-center justify-center font-bold">-</button>
+              <span class="font-mono font-bold text-white w-4 text-center">${item.qty}</span>
+              <button onclick="addProductToCart('${item.productId}')" class="w-6 h-6 rounded-lg bg-slate-800 hover:bg-emerald-500/20 hover:text-emerald-400 text-slate-300 flex items-center justify-center font-bold">+</button>
+            </div>
+            <span class="font-mono font-bold text-emerald-400 w-16 text-right">${formatBs(item.price * item.qty)}</span>
+          </div>
+        `).join('');
+      }
+
+      const productsCost = calculateCartTotal(currentCart);
+      const grandTotal = rentalCost + productsCost;
+
+      document.getElementById('pos-summary-rental').textContent = formatBs(rentalCost);
+      document.getElementById('pos-summary-products').textContent = formatBs(productsCost);
+      document.getElementById('pos-summary-total').textContent = formatBs(grandTotal);
+
+      renderPosCatalog();
+    }
+
+    function selectPosTable(val) {
+      state.selectedPosTableId = val;
+      renderPos();
+      lucide.createIcons();
+    }
+
+    function togglePauseTable(tableId) {
+      const table = getCurrentBranch().tables.find(t => t.id === tableId);
+      if (!table) return;
+      table.isPaused = !table.isPaused;
+      showToast(table.isPaused ? `Cronómetro pausado en ${table.name}` : `Cronómetro reanudado en ${table.name}`, 'warning');
+      renderAll();
+    }
+
+    function resetTableTimer(tableId) {
+      const table = getCurrentBranch().tables.find(t => t.id === tableId);
+      if (!table) return;
+      table.elapsedSeconds = 0;
+      table.status = 'libre';
+      table.isPaused = false;
+      showToast(`Tiempo reiniciado en ${table.name}`, 'info');
+      renderAll();
+    }
+
+    function setPosCategory(cat) {
+      state.posCategoryFilter = cat;
+      document.querySelectorAll('.pos-cat-btn').forEach(btn => {
+        if (btn.textContent.includes(cat) || (cat === 'Todas' && btn.textContent === 'Todas')) {
+          btn.className = 'pos-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500 text-slate-950';
+        } else {
+          btn.className = 'pos-cat-btn px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700';
+        }
+      });
+      renderPosCatalog();
+    }
+
+    function renderPosCatalog() {
+      const branch = getCurrentBranch();
+      const query = document.getElementById('pos-search-input').value.toLowerCase();
+      const grid = document.getElementById('pos-products-grid');
+
+      const filtered = branch.inventory.filter(p => {
+        const matchesCat = state.posCategoryFilter === 'Todas' || p.category === state.posCategoryFilter;
+        const matchesSearch = p.name.toLowerCase().includes(query);
+        return matchesCat && matchesSearch;
+      });
+
+      grid.innerHTML = filtered.map(prod => {
+        const outOfStock = prod.stock <= 0;
+        return `
+          <button onclick="addProductToCart('${prod.id}')" ${outOfStock ? 'disabled' : ''} class="text-left p-4 rounded-xl border ${outOfStock ? 'bg-slate-950/40 border-slate-800/50 opacity-50 cursor-not-allowed' : 'bg-slate-800/50 hover:bg-slate-800 border-slate-700/70 hover:border-emerald-500/50 cursor-pointer'} transition flex flex-col justify-between group">
+            <div>
+              <div class="flex items-center justify-between gap-2 mb-1.5">
+                <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-900 text-slate-400">${prod.category}</span>
+                <span class="text-[11px] font-mono ${prod.stock <= prod.minStock ? 'text-rose-400 font-bold' : 'text-slate-400'}">Stock: ${prod.stock}</span>
+              </div>
+              <p class="text-sm font-bold text-white group-hover:text-emerald-300 transition">${prod.name}</p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-slate-700/50 flex items-center justify-between">
+              <span class="font-mono font-extrabold text-emerald-400 text-sm">${formatBs(prod.price)}</span>
+              <span class="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500 group-hover:text-slate-950 flex items-center justify-center transition">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+              </span>
+            </div>
+          </button>
+        `;
+      }).join('');
+      lucide.createIcons();
+    }
+
+    function addProductToCart(productId) {
+      const branch = getCurrentBranch();
+      const prod = branch.inventory.find(p => p.id === productId);
+      if (!prod || prod.stock <= 0) {
+        showToast('Producto sin stock disponible en esta sucursal.', 'error');
+        return;
+      }
+
+      const isDirect = state.selectedPosTableId === 'direct';
+      const targetCart = isDirect
+        ? state.directSaleCart
+        : branch.tables.find(t => t.id === state.selectedPosTableId).cart;
+
+      const existing = targetCart.find(i => i.productId === productId);
+      if (existing) {
+        existing.qty += 1;
+      } else {
+        targetCart.push({ productId: prod.id, name: prod.name, price: prod.price, qty: 1 });
+      }
+
+      // Descuento inmediato del stock local
+      prod.stock -= 1;
+      showToast(`+1 ${prod.name} agregado a la cuenta`, 'success');
+      renderAll();
+    }
+
+    function removeProductFromCart(productId) {
+      const branch = getCurrentBranch();
+      const prod = branch.inventory.find(p => p.id === productId);
+      const isDirect = state.selectedPosTableId === 'direct';
+      const targetCart = isDirect
+        ? state.directSaleCart
+        : branch.tables.find(t => t.id === state.selectedPosTableId).cart;
+
+      const idx = targetCart.findIndex(i => i.productId === productId);
+      if (idx === -1) return;
+
+      targetCart[idx].qty -= 1;
+      if (prod) prod.stock += 1; // Devolver al stock
+      if (targetCart[idx].qty <= 0) targetCart.splice(idx, 1);
+
+      renderAll();
+    }
+
+    // =========================================================================
+    // 6. COBRO, TICKET PDF E HISTORIAL DE RECIBOS
+    // =========================================================================
+    function buildReceiptHtml(receiptData) {
+      const branch = state.branches.find(b => b.id === receiptData.branchId) || getCurrentBranch();
+      const taxAmount = receiptData.total * (state.settings.taxRate / 100);
+      return `
+        <div class="text-center border-b-2 border-dashed border-slate-400 pb-3 mb-3">
+          <div class="w-8 h-8 rounded-full bg-slate-900 text-white font-extrabold text-sm flex items-center justify-center mx-auto mb-1">8</div>
+          <p class="font-extrabold text-slate-900 text-sm uppercase">${state.settings.salonName}</p>
+          <p class="text-[11px] text-slate-700">${branch.name}</p>
+          <p class="text-[10px] text-slate-600">${branch.address} • Tel: ${branch.phone}</p>
+          <p class="text-[10px] text-slate-600 mt-1">NIT: 314892019 • RECIBO N° <strong>#${receiptData.id}</strong></p>
+        </div>
+        <div class="space-y-1 text-[11px] text-slate-800 border-b border-dashed border-slate-400 pb-2 mb-2">
+          <div class="flex justify-between"><span>Fecha/Hora:</span><span>${receiptData.dateLabel} ${receiptData.timestamp}</span></div>
+          <div class="flex justify-between"><span>Concepto:</span><strong>${receiptData.concept}</strong></div>
+          <div class="flex justify-between"><span>Cajero:</span><span>${receiptData.cashier}</span></div>
+          <div class="flex justify-between"><span>Pago:</span><span>${receiptData.method}</span></div>
+        </div>
+        <div class="space-y-1.5 text-[11px] text-slate-900 border-b-2 border-dashed border-slate-400 pb-3 mb-2">
+          ${receiptData.rentalTotal > 0 ? `
+            <div class="flex justify-between">
+              <span>Alquiler (${receiptData.minutes}m x ${formatBs(receiptData.ratePerMin)})</span>
+              <strong>${formatBs(receiptData.rentalTotal)}</strong>
+            </div>
+          ` : ''}
+          ${receiptData.items.map(i => `
+            <div class="flex justify-between">
+              <span>${i.qty}x ${i.name}</span>
+              <span>${formatBs(i.price * i.qty)}</span>
+            </div>
+          `).join('')}
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between text-[11px] text-slate-600">
+            <span>IVA Referencial (${state.settings.taxRate}%):</span>
+            <span>${formatBs(taxAmount)}</span>
+          </div>
+          <div class="flex justify-between text-sm font-extrabold text-slate-950 pt-1">
+            <span>TOTAL:</span>
+            <span>${formatBs(receiptData.total)}</span>
+          </div>
+        </div>
+        <div class="mt-4 pt-2 border-t border-slate-300 text-center">
+          <div class="inline-block px-3 py-1 bg-slate-900 text-white text-[9px] tracking-widest font-bold rounded">|||| ||| || |||| ||| ||||</div>
+          <p class="text-[10px] text-slate-600 mt-1">¡Gracias por jugar en Bola8!</p>
+        </div>
+      `;
+    }
+
+    function openCheckoutModal() {
+      const branch = getCurrentBranch();
+      const isDirect = state.selectedPosTableId === 'direct';
+      const table = isDirect ? null : branch.tables.find(t => t.id === state.selectedPosTableId);
+      const cart = isDirect ? state.directSaleCart : table.cart;
+      const rentalCost = isDirect ? 0 : calculateRentalCost(table);
+      const productsCost = calculateCartTotal(cart);
+      const total = rentalCost + productsCost;
+
+      if (total <= 0) {
+        showToast('No hay montos pendientes para cobrar en esta cuenta.', 'warning');
+        return;
+      }
+
+      const cashierEl = document.getElementById('role-display-name');
+      const previewReceipt = {
+        id: 'B8-' + Math.floor(1045 + Math.random() * 900),
+        dateLabel: 'Hoy',
+        timestamp: new Date().toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit' }),
+        branchId: branch.id,
+        type: isDirect ? 'Venta Directa POS' : 'Mesa + Consumo',
+        concept: isDirect ? 'Venta Directa Barra' : `${table.name} (${table.type})`,
+        cashier: cashierEl ? cashierEl.textContent : 'Cajero Turno',
+        method: 'Efectivo / QR',
+        minutes: isDirect ? 0 : Math.max(1, Math.ceil(table.elapsedSeconds / 60)),
+        ratePerMin: isDirect ? 0 : table.ratePerMin,
+        rentalTotal: rentalCost,
+        items: cart.map(c => ({ ...c })),
+        total
+      };
+
+      state.pendingReceipt = previewReceipt;
+      document.getElementById('modal-receipt-title').textContent = 'Vista Previa de Cobro • PDF';
+      document.getElementById('receipt-content').innerHTML = buildReceiptHtml(previewReceipt);
+      document.getElementById('receipt-modal-actions').innerHTML = `
+        <button onclick="closeModal('modal-checkout')" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">Cancelar</button>
+        <button onclick="confirmPayment()" class="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5">
+          <i data-lucide="check-circle" class="w-4 h-4"></i> Confirmar y Emitir
+        </button>
+      `;
+
+      const modal = document.getElementById('modal-checkout');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      lucide.createIcons();
+    }
+
+    function confirmPayment() {
+      const branch = getCurrentBranch();
+      const isDirect = state.selectedPosTableId === 'direct';
+
+      if (isDirect) {
+        const productsCost = calculateCartTotal(state.directSaleCart);
+        branch.posIncomeToday += productsCost;
+        state.directSaleCart = [];
+      } else {
+        const table = branch.tables.find(t => t.id === state.selectedPosTableId);
+        const rentalCost = calculateRentalCost(table);
+        const productsCost = calculateCartTotal(table.cart);
+        branch.rentalIncomeToday += rentalCost;
+        branch.posIncomeToday += productsCost;
+
+        table.status = 'libre';
+        table.elapsedSeconds = 0;
+        table.isPaused = false;
+        table.cart = [];
+      }
+
+      if (state.pendingReceipt) {
+        state.receiptsHistory.unshift(state.pendingReceipt);
+      }
+
+      document.getElementById('modal-receipt-title').textContent = `Recibo Emitido #${state.pendingReceipt.id}`;
+      document.getElementById('receipt-modal-actions').innerHTML = `
+        <button onclick="closeModal('modal-checkout')" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">Cerrar</button>
+        <button onclick="printReceiptPdf()" class="py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold flex items-center justify-center gap-1.5">
+          <i data-lucide="printer" class="w-4 h-4"></i> Imprimir / Guardar PDF
+        </button>
+      `;
+
+      showToast('¡Cobro registrado! Recibo guardado en Historial.', 'success');
+      renderAll();
+    }
+
+    function openHistoricalReceipt(receiptId) {
+      const rec = state.receiptsHistory.find(r => r.id === receiptId);
+      if (!rec) return;
+      document.getElementById('modal-receipt-title').textContent = `Comprobante Digital #${rec.id}`;
+      document.getElementById('receipt-content').innerHTML = buildReceiptHtml(rec);
+      document.getElementById('receipt-modal-actions').innerHTML = `
+        <button onclick="closeModal('modal-checkout')" class="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold">Cerrar</button>
+        <button onclick="printReceiptPdf()" class="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5">
+          <i data-lucide="printer" class="w-4 h-4"></i> Imprimir / PDF (${state.settings.printSize})
+        </button>
+      `;
+      const modal = document.getElementById('modal-checkout');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      lucide.createIcons();
+    }
+
+    function printReceiptPdf() {
+      showToast('Preparando documento PDF para impresión...', 'info');
+      setTimeout(() => window.print(), 200);
+    }
+
+    // =========================================================================
+    // 7. ADMINISTRACIÓN DE MESAS Y TARIFAS POR MINUTO
+    // =========================================================================
+    function renderMesasAdmin() {
+      const branch = getCurrentBranch();
+      const canEdit = state.currentRole !== 'cajero';
+
+      const banner = document.getElementById('admin-tables-readonly-banner');
+      const btnAdd = document.getElementById('btn-add-table');
+      if (canEdit) {
+        banner.classList.add('hidden');
+        btnAdd.classList.remove('hidden');
+      } else {
+        banner.classList.remove('hidden');
+        btnAdd.classList.add('hidden');
+      }
+
+      const tbody = document.getElementById('admin-tables-tbody');
+      tbody.innerHTML = branch.tables.map(table => `
+        <tr class="hover:bg-slate-800/30 transition">
+          <td class="py-3.5 px-5 font-bold text-white">${table.name}</td>
+          <td class="py-3.5 px-5 text-slate-300">${table.type}</td>
+          <td class="py-3.5 px-5">
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-slate-400">Bs.</span>
+              <input type="number" step="0.05" min="0.10" value="${table.ratePerMin.toFixed(2)}"
+                ${!canEdit ? 'disabled' : ''}
+                onchange="updateTableRate('${table.id}', this.value)"
+                class="w-24 bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 font-mono text-sm font-bold text-emerald-400 focus:outline-none focus:border-emerald-500 disabled:opacity-50">
+            </div>
+          </td>
+          <td class="py-3.5 px-5 font-mono text-xs text-slate-400">${formatBs(table.ratePerMin * 60)} / hora</td>
+          <td class="py-3.5 px-5">
+            <span class="px-2.5 py-1 rounded-full text-[11px] font-semibold ${table.status === 'libre' ? 'bg-emerald-500/15 text-emerald-400' : table.status === 'ocupada' ? 'bg-amber-500/15 text-amber-300' : 'bg-slate-700 text-slate-300'}">
+              ${table.status.toUpperCase()}
+            </span>
+          </td>
+          <td class="py-3.5 px-5 text-right space-x-2">
+            ${canEdit ? `
+              <button onclick="toggleTableMaintenance('${table.id}')" title="Alternar Mantenimiento" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+                <i data-lucide="wrench" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteTable('${table.id}')" title="Eliminar Mesa" class="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            ` : `<span class="text-xs text-slate-500">Solo lectura</span>`}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function updateTableRate(tableId, newRate) {
+      const rate = parseFloat(newRate);
+      if (isNaN(rate) || rate <= 0) {
+        showToast('La tarifa por minuto debe ser mayor a Bs. 0.00', 'error');
+        renderMesasAdmin();
+        return;
+      }
+      const table = getCurrentBranch().tables.find(t => t.id === tableId);
+      if (table) {
+        table.ratePerMin = rate;
+        showToast(`Tarifa de ${table.name} actualizada a ${formatBs(rate)}/min`, 'success');
+        renderAll();
+      }
+    }
+
+    function toggleTableMaintenance(tableId) {
+      const table = getCurrentBranch().tables.find(t => t.id === tableId);
+      if (!table) return;
+      if (table.status === 'ocupada') {
+        showToast('No puedes poner en mantenimiento una mesa ocupada.', 'error');
+        return;
+      }
+      table.status = table.status === 'mantenimiento' ? 'libre' : 'mantenimiento';
+      showToast(`${table.name} ahora está ${table.status.toUpperCase()}`, 'info');
+      renderAll();
+    }
+
+    function deleteTable(tableId) {
+      const branch = getCurrentBranch();
+      const table = branch.tables.find(t => t.id === tableId);
+      if (!table) return;
+      if (table.status === 'ocupada') {
+        showToast('No se puede eliminar una mesa con sesión activa.', 'error');
+        return;
+      }
+      branch.tables = branch.tables.filter(t => t.id !== tableId);
+      showToast(`${table.name} eliminada de ${branch.name}`, 'warning');
+      renderAll();
+    }
+
+    function openNewTableModal() {
+      const modal = document.getElementById('modal-new-table');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function createNewTable(e) {
+      e.preventDefault();
+      const branch = getCurrentBranch();
+      const name = document.getElementById('new-table-name').value.trim();
+      const type = document.getElementById('new-table-type').value;
+      const rate = parseFloat(document.getElementById('new-table-rate').value);
+
+      branch.tables.push({
+        id: 'm-' + Date.now(),
+        name,
+        type,
+        ratePerMin: rate,
+        status: 'libre',
+        elapsedSeconds: 0,
+        isPaused: false,
+        cart: []
+      });
+
+      closeModal('modal-new-table');
+      e.target.reset();
+      showToast(`Mesa "${name}" creada con tarifa ${formatBs(rate)}/min`, 'success');
+      renderAll();
+    }
+
+    // =========================================================================
+    // 8. INVENTARIO LOCAL
+    // =========================================================================
+    function renderInventory() {
+      const branch = getCurrentBranch();
+      const query = document.getElementById('inv-search-input').value.toLowerCase();
+      const tbody = document.getElementById('inventory-tbody');
+
+      const filtered = branch.inventory.filter(p => p.name.toLowerCase().includes(query) || p.category.toLowerCase().includes(query));
+
+      tbody.innerHTML = filtered.map(prod => {
+        const isLow = prod.stock <= prod.minStock;
+        return `
+          <tr class="hover:bg-slate-800/30 transition">
+            <td class="py-3.5 px-5 font-semibold text-white">${prod.name}</td>
+            <td class="py-3.5 px-5"><span class="px-2.5 py-1 rounded-lg bg-slate-800 text-xs text-slate-300">${prod.category}</span></td>
+            <td class="py-3.5 px-5 font-mono text-emerald-400 font-bold">${formatBs(prod.price)}</td>
+            <td class="py-3.5 px-5 font-mono font-bold text-white">${prod.stock} unid.</td>
+            <td class="py-3.5 px-5">
+              ${isLow
+                ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Stock Bajo (Mín: ${prod.minStock})</span>`
+                : `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-400">Óptimo</span>`
+              }
+            </td>
+            <td class="py-3.5 px-5 text-right">
+              <button onclick="restockProduct('${prod.id}', 10)" class="px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/30 text-xs font-semibold transition">
+                +10 Unid.
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function restockProduct(prodId, qty) {
+      const prod = getCurrentBranch().inventory.find(p => p.id === prodId);
+      if (!prod) return;
+      prod.stock += qty;
+      showToast(`Stock reabastecido: +${qty} ${prod.name}`, 'success');
+      renderAll();
+    }
+
+    function openNewProductModal() {
+      const modal = document.getElementById('modal-new-product');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function createNewProduct(e) {
+      e.preventDefault();
+      const branch = getCurrentBranch();
+      const name = document.getElementById('new-prod-name').value.trim();
+      const category = document.getElementById('new-prod-cat').value;
+      const price = parseFloat(document.getElementById('new-prod-price').value);
+      const stock = parseInt(document.getElementById('new-prod-stock').value);
+
+      branch.inventory.push({
+        id: 'p-' + Date.now(),
+        name,
+        category,
+        price,
+        stock,
+        minStock: 8
+      });
+
+      closeModal('modal-new-product');
+      e.target.reset();
+      showToast(`Producto "${name}" agregado al inventario local`, 'success');
+      renderAll();
+    }
+
+    // =========================================================================
+    // 9. RESERVAS CON VALIDACIÓN DE CRUCE HORARIO
+    // =========================================================================
+    function renderReservations() {
+      const branch = getCurrentBranch();
+      const select = document.getElementById('res-table-select');
+      select.innerHTML = branch.tables
+        .filter(t => t.status !== 'mantenimiento')
+        .map(t => `<option value="${t.id}">${t.name} (${t.type})</option>`)
+        .join('');
+
+      const list = document.getElementById('reservations-list');
+      if (branch.reservations.length === 0) {
+        list.innerHTML = `<div class="p-8 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-xl">No hay reservas registradas para hoy en esta sucursal.</div>`;
+        return;
+      }
+
+      list.innerHTML = branch.reservations.map(res => `
+        <div class="p-4 rounded-xl bg-slate-950/60 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-bold text-xs shrink-0">
+              ${res.startTime}
+            </div>
+            <div>
+              <p class="font-bold text-white text-sm">${res.client} <span class="text-xs font-normal text-slate-400">(${res.phone})</span></p>
+              <p class="text-xs text-emerald-400 mt-0.5">${res.tableName} • Duración: ${res.durationHours}h</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 self-end sm:self-center">
+            <button onclick="seatReservation('${res.id}')" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">Iniciar Mesa</button>
+            <button onclick="cancelReservation('${res.id}')" class="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function createReservation(e) {
+      e.preventDefault();
+      const branch = getCurrentBranch();
+      const client = document.getElementById('res-client-name').value.trim();
+      const phone = document.getElementById('res-client-phone').value.trim();
+      const tableId = document.getElementById('res-table-select').value;
+      const startTime = document.getElementById('res-time-start').value;
+      const durationHours = parseInt(document.getElementById('res-duration').value);
+
+      // Validar cruce horario exacto en misma mesa
+      const conflict = branch.reservations.find(r => r.tableId === tableId && r.startTime === startTime);
+      if (conflict) {
+        showToast(`Conflicto de horario: Ya existe una reserva a las ${startTime} en esa mesa.`, 'error');
+        return;
+      }
+
+      const table = branch.tables.find(t => t.id === tableId);
+      branch.reservations.push({
+        id: 'r-' + Date.now(),
+        client,
+        phone,
+        tableId,
+        tableName: table.name,
+        startTime,
+        durationHours
+      });
+
+      e.target.reset();
+      showToast(`Reserva confirmada para ${client} en ${table.name}`, 'success');
+      renderAll();
+    }
+
+    function seatReservation(resId) {
+      const branch = getCurrentBranch();
+      const res = branch.reservations.find(r => r.id === resId);
+      if (!res) return;
+      startTableTimer(res.tableId);
+      branch.reservations = branch.reservations.filter(r => r.id !== resId);
+      navigate('dashboard');
+    }
+
+    function cancelReservation(resId) {
+      const branch = getCurrentBranch();
+      branch.reservations = branch.reservations.filter(r => r.id !== resId);
+      showToast('Reserva cancelada', 'warning');
+      renderAll();
+    }
+
+    // =========================================================================
+    // 10. ARQUEO Y CIERRE DE CAJA
+    // =========================================================================
+    function renderCaja() {
+      const branch = getCurrentBranch();
+      const expected = branch.cashBase + branch.rentalIncomeToday + branch.posIncomeToday;
+
+      document.getElementById('caja-branch-label').textContent = branch.name;
+      document.getElementById('caja-base-amount').textContent = formatBs(branch.cashBase);
+      document.getElementById('caja-tables-income').textContent = formatBs(branch.rentalIncomeToday);
+      document.getElementById('caja-pos-income').textContent = formatBs(branch.posIncomeToday);
+      document.getElementById('caja-expected-total').textContent = formatBs(expected);
+      calculateCashDiff();
+    }
+
+    function calculateCashDiff() {
+      const branch = getCurrentBranch();
+      const expected = branch.cashBase + branch.rentalIncomeToday + branch.posIncomeToday;
+      const inputVal = document.getElementById('caja-declared-input').value;
+      const diffEl = document.getElementById('caja-diff-amount');
+      const labelEl = document.getElementById('caja-diff-label');
+
+      if (inputVal === '') {
+        diffEl.textContent = 'Bs. 0.00';
+        diffEl.className = 'text-xl font-extrabold font-mono text-slate-300 mt-1';
+        labelEl.textContent = 'Ingresa el efectivo contado para calcular';
+        return;
+      }
+
+      const declared = parseFloat(inputVal);
+      const diff = declared - expected;
+
+      if (Math.abs(diff) < 0.01) {
+        diffEl.textContent = 'Bs. 0.00';
+        diffEl.className = 'text-xl font-extrabold font-mono text-emerald-400 mt-1';
+        labelEl.textContent = '✓ Caja Cuadrada Exacta';
+      } else if (diff > 0) {
+        diffEl.textContent = `+${formatBs(diff)}`;
+        diffEl.className = 'text-xl font-extrabold font-mono text-sky-400 mt-1';
+        labelEl.textContent = 'Sobrante en caja';
+      } else {
+        diffEl.textContent = `-${formatBs(Math.abs(diff))}`;
+        diffEl.className = 'text-xl font-extrabold font-mono text-rose-400 mt-1';
+        labelEl.textContent = '⚠ Faltante en caja';
+      }
+    }
+
+    function executeCashClose() {
+      const inputVal = document.getElementById('caja-declared-input').value;
+      if (inputVal === '') {
+        showToast('Por favor ingresa el efectivo físico contado antes de cerrar turno.', 'warning');
+        return;
+      }
+      document.getElementById('caja-status-text').textContent = 'Turno Cerrado y Auditado';
+      document.getElementById('caja-status-text').className = 'text-amber-400';
+      showToast('Arqueo y cierre de turno registrado correctamente.', 'success');
+    }
+
+    // =========================================================================
+    // 11. GESTIÓN DE SUCURSALES (ADMIN GENERAL)
+    // =========================================================================
+    function renderSucursales() {
+      const grid = document.getElementById('branches-grid');
+      grid.innerHTML = state.branches.map(b => {
+        const activeCount = b.tables.filter(t => t.status === 'ocupada').length;
+        const income = b.rentalIncomeToday + b.posIncomeToday;
+        return `
+          <div class="bg-slateLounge-900 border ${b.id === state.currentBranchId ? 'border-emerald-500/60' : 'border-slate-800'} rounded-2xl p-5 flex flex-col justify-between">
+            <div>
+              <div class="flex items-start justify-between gap-2">
+                <h3 class="font-bold text-white text-base">${b.name}</h3>
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400">ACTIVA</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-1 flex items-center gap-1.5"><i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-500"></i> ${b.address}</p>
+              <p class="text-xs text-slate-400 mt-1 flex items-center gap-1.5"><i data-lucide="phone" class="w-3.5 h-3.5 text-slate-500"></i> ${b.phone}</p>
+
+              <div class="grid grid-cols-2 gap-3 my-4 p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div>
+                  <p class="text-[10px] text-slate-500 uppercase">Mesas Activas</p>
+                  <p class="text-sm font-bold text-white font-mono">${activeCount} / ${b.tables.length}</p>
+                </div>
+                <div>
+                  <p class="text-[10px] text-slate-500 uppercase">Ingresos Hoy</p>
+                  <p class="text-sm font-bold text-emerald-400 font-mono">${formatBs(income)}</p>
+                </div>
+              </div>
+            </div>
+
+            <button onclick="switchAndViewBranch('${b.id}')" class="w-full py-2.5 rounded-xl ${b.id === state.currentBranchId ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/40' : 'bg-slate-800 hover:bg-slate-700 text-white'} text-xs font-semibold transition">
+              ${b.id === state.currentBranchId ? 'Sucursal Seleccionada' : 'Administrar esta Sucursal'}
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function switchAndViewBranch(branchId) {
+      document.getElementById('branch-selector').value = branchId;
+      changeBranch(branchId);
+      navigate('dashboard');
+    }
+
+    function openNewBranchModal() {
+      const modal = document.getElementById('modal-new-branch');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function createNewBranch(e) {
+      e.preventDefault();
+      const name = document.getElementById('new-branch-name').value.trim();
+      const address = document.getElementById('new-branch-address').value.trim();
+      const phone = document.getElementById('new-branch-phone').value.trim();
+
+      const newId = 'suc-' + Date.now();
+      state.branches.push({
+        id: newId,
+        name,
+        address,
+        phone,
+        active: true,
+        cashBase: 200.00,
+        rentalIncomeToday: 0,
+        posIncomeToday: 0,
+        tables: [
+          { id: 't-' + Date.now(), name: 'Mesa 01', type: 'Pool Profesional', ratePerMin: 0.60, status: 'libre', elapsedSeconds: 0, isPaused: false, cart: [] }
+        ],
+        inventory: [
+          { id: 'i-' + Date.now(), name: 'Cerveza Paceña 620ml', category: 'Cervezas', price: 20.00, stock: 24, minStock: 10 }
+        ],
+        reservations: []
+      });
+
+      populateBranchSelector();
+      closeModal('modal-new-branch');
+      e.target.reset();
+      showToast(`Sucursal "${name}" registrada en la cadena Bola8`, 'success');
+      renderAll();
+    }
+
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // =========================================================================
+    // 12. GESTIÓN DE USUARIOS (SOLO ADMINISTRADOR GENERAL)
+    // =========================================================================
+    function renderUsers() {
+      const search = (document.getElementById('users-search-input')?.value || '').toLowerCase();
+      const roleFilter = document.getElementById('users-role-filter')?.value || 'all';
+      const branchFilter = document.getElementById('users-branch-filter')?.value || 'all';
+
+      // Poblar filtro de sucursales en usuarios si hace falta
+      const bFilterEl = document.getElementById('users-branch-filter');
+      if (bFilterEl && bFilterEl.options.length <= 1) {
+        state.branches.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.id;
+          opt.textContent = b.name;
+          bFilterEl.appendChild(opt);
+        });
+      }
+
+      document.getElementById('kpi-users-active').textContent = state.users.filter(u => u.active).length;
+      document.getElementById('kpi-users-admins').textContent = state.users.filter(u => u.role === 'admin_sucursal').length;
+      document.getElementById('kpi-users-cashiers').textContent = state.users.filter(u => u.role === 'cajero').length;
+
+      const filtered = state.users.filter(u => {
+        const matchText = u.name.toLowerCase().includes(search) || u.email.toLowerCase().includes(search);
+        const matchRole = roleFilter === 'all' || u.role === roleFilter;
+        const matchBranch = branchFilter === 'all' || u.branchId === branchFilter;
+        return matchText && matchRole && matchBranch;
+      });
+
+      const roleBadges = {
+        admin_general: '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">Admin General</span>',
+        admin_sucursal: '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-500/15 text-sky-300 border border-sky-500/30">Admin Sucursal</span>',
+        cajero: '<span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">Cajero / Operador</span>'
+      };
+
+      const tbody = document.getElementById('users-tbody');
+      tbody.innerHTML = filtered.map(u => {
+        const branchName = u.branchId === 'all'
+          ? 'Todas las Sucursales'
+          : (state.branches.find(b => b.id === u.branchId)?.name || 'Sucursal Asignada');
+        return `
+          <tr class="hover:bg-slate-800/30 transition">
+            <td class="py-3.5 px-5">
+              <p class="font-bold text-white">${u.name}</p>
+              <p class="text-xs text-slate-400">${u.email}</p>
+            </td>
+            <td class="py-3.5 px-5">${roleBadges[u.role]}</td>
+            <td class="py-3.5 px-5 text-xs text-slate-300">${branchName}</td>
+            <td class="py-3.5 px-5 font-mono text-xs text-slate-400">•••• (${u.pin})</td>
+            <td class="py-3.5 px-5">
+              <button onclick="toggleUserStatus('${u.id}')" class="px-2.5 py-1 rounded-full text-[11px] font-bold cursor-pointer ${u.active ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'}">
+                ${u.active ? '● Activo' : '○ Inactivo'}
+              </button>
+            </td>
+            <td class="py-3.5 px-5 text-right space-x-1.5">
+              <button onclick="openUserModal('${u.id}')" title="Editar Usuario" class="p-2 rounded-lg bg-slate-800 hover:bg-sky-600/20 text-slate-300 hover:text-sky-400 transition">
+                <i data-lucide="edit-3" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteUser('${u.id}')" title="Eliminar Usuario" class="p-2 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function openUserModal(userId = null) {
+      const branchSelect = document.getElementById('user-branch');
+      branchSelect.innerHTML = `<option value="all">Todas las Sucursales (Global)</option>` +
+        state.branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
+
+      if (userId) {
+        const u = state.users.find(x => x.id === userId);
+        document.getElementById('modal-user-title').textContent = 'Editar Usuario';
+        document.getElementById('edit-user-id').value = u.id;
+        document.getElementById('user-name').value = u.name;
+        document.getElementById('user-email').value = u.email;
+        document.getElementById('user-role').value = u.role;
+        document.getElementById('user-branch').value = u.branchId;
+        document.getElementById('user-pin').value = u.pin;
+        document.getElementById('user-status').value = u.active ? 'activo' : 'inactivo';
+      } else {
+        document.getElementById('modal-user-title').textContent = 'Registrar Nuevo Usuario';
+        document.getElementById('edit-user-id').value = '';
+        document.getElementById('user-name').value = '';
+        document.getElementById('user-email').value = '';
+        document.getElementById('user-role').value = 'cajero';
+        document.getElementById('user-branch').value = state.currentBranchId;
+        document.getElementById('user-pin').value = Math.floor(1000 + Math.random() * 9000);
+        document.getElementById('user-status').value = 'activo';
+      }
+
+      const modal = document.getElementById('modal-user');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function saveUser(e) {
+      e.preventDefault();
+      const id = document.getElementById('edit-user-id').value;
+      const payload = {
+        name: document.getElementById('user-name').value.trim(),
+        email: document.getElementById('user-email').value.trim(),
+        role: document.getElementById('user-role').value,
+        branchId: document.getElementById('user-branch').value,
+        pin: document.getElementById('user-pin').value.trim(),
+        active: document.getElementById('user-status').value === 'activo'
+      };
+
+      if (id) {
+        const idx = state.users.findIndex(u => u.id === id);
+        if (idx !== -1) state.users[idx] = { ...state.users[idx], ...payload };
+        showToast(`Usuario ${payload.name} actualizado`, 'success');
+      } else {
+        state.users.push({ id: 'u-' + Date.now(), ...payload });
+        showToast(`Usuario ${payload.name} creado correctamente`, 'success');
+      }
+
+      closeModal('modal-user');
+      renderAll();
+    }
+
+    function toggleUserStatus(userId) {
+      const u = state.users.find(x => x.id === userId);
+      if (!u) return;
+      u.active = !u.active;
+      showToast(`Estado de ${u.name}: ${u.active ? 'Activo' : 'Inactivo'}`, 'info');
+      renderAll();
+    }
+
+    function deleteUser(userId) {
+      if (userId === 'u-1') {
+        showToast('No puedes eliminar al Administrador General principal.', 'error');
+        return;
+      }
+      state.users = state.users.filter(u => u.id !== userId);
+      showToast('Usuario eliminado del sistema', 'warning');
+      renderAll();
+    }
+
+    // =========================================================================
+    // 13. HISTORIAL DE OPERACIONES Y RECIBOS DEL DÍA
+    // =========================================================================
+    function renderHistory() {
+      const dateFilter = document.getElementById('hist-date-filter')?.value || 'Hoy';
+      const branchFilter = document.getElementById('hist-branch-filter')?.value || 'current';
+      const typeFilter = document.getElementById('hist-type-filter')?.value || 'all';
+
+      document.getElementById('nav-badge-receipts').textContent = state.receiptsHistory.filter(r => r.dateLabel === 'Hoy').length;
+
+      const filtered = state.receiptsHistory.filter(r => {
+        const matchDate = dateFilter === 'Todas' || r.dateLabel === dateFilter;
+        const matchBranch = branchFilter === 'all' || r.branchId === state.currentBranchId;
+        const matchType = typeFilter === 'all' || r.type === typeFilter;
+        return matchDate && matchBranch && matchType;
+      });
+
+      const totalRec = filtered.reduce((acc, r) => acc + r.total, 0);
+      const avgTicket = filtered.length > 0 ? totalRec / filtered.length : 0;
+
+      document.getElementById('hist-kpi-total').textContent = formatBs(totalRec);
+      document.getElementById('hist-kpi-count').textContent = filtered.length;
+      document.getElementById('hist-kpi-avg').textContent = formatBs(avgTicket);
+
+      const tbody = document.getElementById('history-tbody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="py-8 text-center text-xs text-slate-500">No se encontraron recibos para los filtros seleccionados.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(r => {
+        const bName = state.branches.find(b => b.id === r.branchId)?.name.split('-')[0] || 'Sucursal';
+        return `
+          <tr class="hover:bg-slate-800/30 transition">
+            <td class="py-3.5 px-5 font-mono font-bold text-emerald-400">#${r.id}</td>
+            <td class="py-3.5 px-5 text-xs text-slate-300">${r.dateLabel} • ${r.timestamp}</td>
+            <td class="py-3.5 px-5 text-xs text-slate-400">${bName}</td>
+            <td class="py-3.5 px-5">
+              <p class="font-semibold text-white text-xs">${r.concept}</p>
+              <p class="text-[11px] text-slate-500">${r.type}</p>
+            </td>
+            <td class="py-3.5 px-5 text-xs text-slate-300">${r.cashier}</td>
+            <td class="py-3.5 px-5"><span class="px-2 py-0.5 rounded bg-slate-800 text-[11px] text-slate-300">${r.method}</span></td>
+            <td class="py-3.5 px-5 font-mono font-extrabold text-white">${formatBs(r.total)}</td>
+            <td class="py-3.5 px-5 text-right">
+              <button onclick="openHistoricalReceipt('${r.id}')" class="px-3 py-1.5 rounded-lg bg-sky-600/20 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/30 text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer">
+                <i data-lucide="file-text" class="w-3.5 h-3.5"></i> Ver Ticket / PDF
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // =========================================================================
+    // 14. REPORTES FINANCIEROS Y CONTABLES + EXPORTACIÓN CSV
+    // =========================================================================
+    function setReportPeriod(period) {
+      state.reportPeriod = period;
+      const labels = { diario: 'Diario (Hoy)', semanal: 'Semanal (7 días)', mensual: 'Mensual', anual: 'Anual' };
+      document.querySelectorAll('.rep-period-btn').forEach(btn => {
+        if (btn.textContent === labels[period]) {
+          btn.className = 'rep-period-btn px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-slate-950';
+        } else {
+          btn.className = 'rep-period-btn px-3.5 py-2 rounded-xl text-xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700';
+        }
+      });
+      renderReports();
+      lucide.createIcons();
+    }
+
+    function renderReports() {
+      const bSelect = document.getElementById('rep-branch-filter');
+      if (bSelect && bSelect.options.length <= 1) {
+        state.branches.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.id;
+          opt.textContent = b.name;
+          bSelect.appendChild(opt);
+        });
+      }
+
+      const selectedBranch = bSelect?.value || 'all';
+      const multipliers = { diario: 1, semanal: 6.4, mensual: 26.5, anual: 312 };
+      const mult = multipliers[state.reportPeriod] || 1;
+
+      const targetBranches = selectedBranch === 'all'
+        ? state.branches
+        : state.branches.filter(b => b.id === selectedBranch);
+
+      const baseTables = targetBranches.reduce((a, b) => a + b.rentalIncomeToday, 0) * mult;
+      const basePos = targetBranches.reduce((a, b) => a + b.posIncomeToday, 0) * mult;
+      const gross = baseTables + basePos;
+      const margin = gross * 0.68;
+      const ticketAvg = (gross / Math.max(1, Math.round(14 * mult)));
+
+      const tablesPct = gross > 0 ? Math.round((baseTables / gross) * 100) : 0;
+      const posPct = 100 - tablesPct;
+
+      document.getElementById('rep-kpi-gross').textContent = formatBs(gross);
+      document.getElementById('rep-kpi-tables').textContent = formatBs(baseTables);
+      document.getElementById('rep-kpi-tables-pct').textContent = `${tablesPct}% del ingreso total`;
+      document.getElementById('rep-kpi-pos').textContent = formatBs(basePos);
+      document.getElementById('rep-kpi-pos-pct').textContent = `${posPct}% del ingreso total`;
+      document.getElementById('rep-kpi-margin').textContent = formatBs(margin);
+      document.getElementById('rep-kpi-ticket').textContent = formatBs(ticketAvg);
+      document.getElementById('rep-tax-info').textContent = `${state.settings.taxRate}% Incluido`;
+
+      // Gráfico de barras dinámicas
+      const chartLabels = {
+        diario: ['14:00', '16:00', '18:00', '20:00', '22:00', '00:00'],
+        semanal: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+        mensual: ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'],
+        anual: ['T1 (Ene-Mar)', 'T2 (Abr-Jun)', 'T3 (Jul-Sep)', 'T4 (Oct-Dic)']
+      };
+      const cols = chartLabels[state.reportPeriod];
+      const weights = [0.55, 0.72, 0.68, 0.95, 1.0, 0.85, 0.9];
+      const barsContainer = document.getElementById('rep-bars-chart');
+      barsContainer.innerHTML = cols.map((lbl, idx) => {
+        const w = weights[idx % weights.length];
+        const hTables = Math.round(w * 75);
+        const hPos = Math.round(w * 92);
+        return `
+          <div class="flex-1 flex flex-col items-center gap-2 h-full justify-end">
+            <div class="w-full max-w-[44px] flex items-end justify-center gap-1 h-40">
+              <div style="height: ${hTables}%" class="w-1/2 bg-amber-500/85 rounded-t-md transition-all duration-500" title="Mesas"></div>
+              <div style="height: ${hPos}%" class="w-1/2 bg-sky-500/85 rounded-t-md transition-all duration-500" title="POS"></div>
+            </div>
+            <span class="text-[11px] font-mono text-slate-400">${lbl}</span>
+          </div>
+        `;
+      }).join('');
+
+      // Rendimiento por sucursal
+      const totalChain = state.branches.reduce((a, b) => a + b.rentalIncomeToday + b.posIncomeToday, 0) * mult;
+      const breakdownEl = document.getElementById('rep-branches-breakdown');
+      breakdownEl.innerHTML = state.branches.map(b => {
+        const bTotal = (b.rentalIncomeToday + b.posIncomeToday) * mult;
+        const pct = totalChain > 0 ? Math.round((bTotal / totalChain) * 100) : 0;
+        return `
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="font-semibold text-white">${b.name.split('-')[0]}</span>
+              <span class="font-mono text-emerald-400 font-bold">${formatBs(bTotal)} (${pct}%)</span>
+            </div>
+            <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+              <div style="width: ${pct}%" class="h-full bg-gradient-to-r from-emerald-500 to-sky-500 rounded-full transition-all duration-500"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Tabla Libro Diario Contable
+      const ledgerTbody = document.getElementById('rep-ledger-tbody');
+      ledgerTbody.innerHTML = targetBranches.map(b => {
+        const tInc = b.rentalIncomeToday * mult;
+        const pInc = b.posIncomeToday * mult;
+        const tot = tInc + pInc;
+        const tax = tot * (state.settings.taxRate / 100);
+        return `
+          <tr class="hover:bg-slate-800/30">
+            <td class="py-3 px-5 text-slate-300 uppercase">${state.reportPeriod}</td>
+            <td class="py-3 px-5 font-sans font-semibold text-white">${b.name}</td>
+            <td class="py-3 px-5 text-amber-400">${formatBs(tInc)}</td>
+            <td class="py-3 px-5 text-sky-400">${formatBs(pInc)}</td>
+            <td class="py-3 px-5 text-slate-400">${formatBs(tax)}</td>
+            <td class="py-3 px-5 text-right font-extrabold text-emerald-400">${formatBs(tot)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function exportReportCSV() {
+      const multipliers = { diario: 1, semanal: 6.4, mensual: 26.5, anual: 312 };
+      const mult = multipliers[state.reportPeriod] || 1;
+      const rows = [
+        ['Periodo', 'Sucursal', 'Ingresos Mesas (BOB)', 'Ingresos POS (BOB)', 'Total Bruto (BOB)', 'IVA Estimado']
+      ];
+      state.branches.forEach(b => {
+        const t = (b.rentalIncomeToday * mult).toFixed(2);
+        const p = (b.posIncomeToday * mult).toFixed(2);
+        const tot = (Number(t) + Number(p)).toFixed(2);
+        const tax = (Number(tot) * (state.settings.taxRate / 100)).toFixed(2);
+        rows.push([state.reportPeriod.toUpperCase(), b.name, t, p, tot, tax]);
+      });
+
+      const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.join(',')).join('\n');
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement('a');
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `Reporte_Contable_Bola8_${state.reportPeriod}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('Reporte contable CSV descargado para Excel', 'success');
+    }
+
+    // =========================================================================
+    // 15. PANEL DE CONFIGURACIÓN (TEMA, IDIOMA, MONEDA, TICKET)
+    // =========================================================================
+    function openSettingsDrawer() {
+      document.getElementById('settings-overlay').classList.remove('hidden');
+      document.getElementById('settings-drawer').classList.remove('-translate-x-full');
+    }
+
+    function closeSettingsDrawer() {
+      document.getElementById('settings-overlay').classList.add('hidden');
+      document.getElementById('settings-drawer').classList.add('-translate-x-full');
+    }
+
+    function setTheme(theme) {
+      state.settings.theme = theme;
+      const html = document.documentElement;
+      const btnDark = document.getElementById('btn-theme-dark');
+      const btnLight = document.getElementById('btn-theme-light');
+
+      if (theme === 'light') {
+        html.classList.remove('dark');
+        html.classList.add('light');
+        btnLight.className = 'py-2.5 px-3 rounded-xl border border-emerald-500 bg-emerald-500/15 text-emerald-600 text-xs font-bold flex items-center justify-center gap-2';
+        btnDark.className = 'py-2.5 px-3 rounded-xl border border-slate-300 bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2';
+      } else {
+        html.classList.remove('light');
+        html.classList.add('dark');
+        btnDark.className = 'py-2.5 px-3 rounded-xl border border-emerald-500 bg-emerald-500/15 text-emerald-400 text-xs font-bold flex items-center justify-center gap-2';
+        btnLight.className = 'py-2.5 px-3 rounded-xl border border-slate-700 bg-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center gap-2';
+      }
+      showToast(`Tema cambiado a ${theme === 'light' ? 'Claro Ejecutivo' : 'Oscuro Lounge'}`, 'info');
+    }
+
+    function setLanguage(lang) {
+      state.settings.lang = lang;
+      const dict = i18nDict[lang] || i18nDict.es;
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key]) el.textContent = dict[key];
+      });
+      updateConfigPill();
+      showToast(lang === 'en' ? 'Language switched to English' : 'Idioma cambiado a Español', 'info');
+    }
+
+    function setCurrency(curr) {
+      state.settings.currency = curr;
+      updateConfigPill();
+      renderAll();
+      showToast(`Moneda del sistema actualizada a ${curr}`, 'success');
+    }
+
+    function updateSalonSettings() {
+      state.settings.salonName = document.getElementById('setting-salon-name').value || 'SALÓN DE BILLAR BOLA8';
+      state.settings.taxRate = parseFloat(document.getElementById('setting-tax-rate').value) || 0;
+      state.settings.printSize = document.getElementById('setting-print-size').value;
+      renderReports();
+      showToast('Parámetros de facturación y ticket actualizados', 'success');
+    }
+
+    function updateConfigPill() {
+      const currCode = currencyRates[state.settings.currency].code;
+      document.getElementById('sidebar-config-pill').textContent = `${state.settings.lang.toUpperCase()} • ${currCode}`;
+    }
+
+    // =========================================================================
+    // 16. RELOJ EN TIEMPO REAL Y RENDERIZADO CENTRAL
+    // =========================================================================
+    setInterval(() => {
+      let hasRunning = false;
+      state.branches.forEach(branch => {
+        branch.tables.forEach(table => {
+          if (table.status === 'ocupada' && !table.isPaused) {
+            table.elapsedSeconds += 1;
+            hasRunning = true;
+          }
+        });
+      });
+
+      if (hasRunning) {
+        if (state.currentView === 'dashboard') renderDashboard();
+        if (state.currentView === 'pos') renderPos();
+        lucide.createIcons();
+      }
+    }, 1000);
+
+    function renderAll() {
+      renderDashboard();
+      renderPos();
+      renderMesasAdmin();
+      renderInventory();
+      renderReservations();
+      renderHistory();
+      renderCaja();
+      renderReports();
+      renderSucursales();
+      renderUsers();
+      lucide.createIcons();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      populateBranchSelector();
+      renderAll();
+    });
+  </script>
+</body>
+</html>
