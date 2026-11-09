@@ -1,12 +1,21 @@
 const Venta = require('../models/ventaModel');
 
 async function create(request, response) {
-  const sale = await Venta.create(request.validatedBody);
+  const input = {
+    ...request.validatedBody,
+    id_sucursal: request.user.rol === 'admin_general'
+      ? request.validatedBody.id_sucursal
+      : Number(request.user.id_sucursal),
+    id_usuario: Number(request.user.sub),
+  };
+  const sale = await Venta.create(input);
   response.status(201).json({ data: sale });
 }
 
 async function list(request, response) {
-  const branchId = request.query.id_sucursal;
+  const branchId = request.user.rol === 'admin_general'
+    ? request.query.id_sucursal
+    : request.user.id_sucursal;
   if (branchId && !/^[1-9]\d*$/.test(String(branchId))) {
     throw httpError(400, 'INVALID_BRANCH_ID', 'id_sucursal debe ser un entero positivo.');
   }

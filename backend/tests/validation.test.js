@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateBranch, validateTable, validateProduct, validateSale } = require('../src/middlewares/validate');
+const { validateBranch, validateTable, validateProduct, validateSale, validateStartSession, validateCashOpen, validateCashClose, validateReservation, validateReservationStatus, validateLogin, validateUser } = require('../src/middlewares/validate');
 
 function runValidation(middleware, body, params = {}) {
   const request = { body, params };
@@ -51,6 +51,101 @@ test('venta valida asociación mesa/venta directa y sus artículos', () => {
   const invalid = runValidation(validateSale, {
     id_sucursal: 1, id_usuario: 2, tipo_venta: 'mesa',
     items: [{ id_producto: 3, cantidad: 2 }]
+  });
+  assert.equal(invalid.error.code, 'VALIDATION_ERROR');
+});
+
+test('sesión requiere id_mesa e id_usuario válidos', () => {
+  const valid = runValidation(validateStartSession, { id_mesa: 7, id_usuario: 4 });
+  assert.equal(valid.error, undefined);
+
+  const invalid = runValidation(validateStartSession, { id_mesa: 0, id_usuario: 4 });
+  assert.equal(invalid.error.code, 'VALIDATION_ERROR');
+});
+
+test('apertura y cierre de caja validan monto e identificadores', () => {
+  const validOpen = runValidation(validateCashOpen, {
+    id_sucursal: 1,
+    id_usuario: 2,
+    monto_inicial: 250
+  });
+  assert.equal(validOpen.error, undefined);
+  assert.equal(validOpen.request.validatedBody.monto_inicial, 250);
+
+  const invalidOpen = runValidation(validateCashOpen, {
+    id_sucursal: 1,
+    id_usuario: 0,
+    monto_inicial: -5
+  });
+  assert.equal(invalidOpen.error.code, 'VALIDATION_ERROR');
+
+  const validClose = runValidation(validateCashClose, { monto_declarado: 180 });
+  assert.equal(validClose.error, undefined);
+
+  const invalidClose = runValidation(validateCashClose, { monto_declarado: -1 });
+  assert.equal(invalidClose.error.code, 'VALIDATION_ERROR');
+});
+
+test('reserva valida datos de cliente, mesa y estado', () => {
+  const valid = runValidation(validateReservation, {
+    nombre_cliente: 'Luis',
+    telefono_cliente: '70012345',
+    fecha_reserva: '2026-11-12',
+    hora_inicio: '19:30',
+    duracion_minutos: 90,
+    id_mesa: 6,
+    estado: 'confirmada'
+  });
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.request.validatedBody.estado, 'confirmada');
+
+  const invalid = runValidation(validateReservation, {
+    nombre_cliente: '  ',
+    telefono_cliente: '70012345',
+    fecha_reserva: '2026/11/12',
+    hora_inicio: '25:00',
+    duracion_minutos: 0,
+    id_mesa: 0
+  });
+  assert.equal(invalid.error.code, 'VALIDATION_ERROR');
+
+  const status = runValidation(validateReservationStatus, { estado: 'cancelada' });
+  assert.equal(status.error, undefined);
+});
+
+test('login valida credenciales mínimas', () => {
+  const valid = runValidation(validateLogin, {
+    email: 'ana@bola8.com',
+    password: '123456'
+  });
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.request.validatedBody.email, 'ana@bola8.com');
+
+  const invalid = runValidation(validateLogin, {
+    email: 'correo',
+    password: '123'
+  });
+  assert.equal(invalid.error.code, 'VALIDATION_ERROR');
+});
+
+test('usuario valida rol y asignación de sucursal', () => {
+  const valid = runValidation(validateUser, {
+    nombre: 'Ana',
+    email: 'ana@bola8.com',
+    password: '123456',
+    rol: 'cajero',
+    id_sucursal: 3,
+    activo: true
+  });
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.request.validatedBody.id_sucursal, 3);
+
+  const invalid = runValidation(validateUser, {
+    nombre: 'Ana',
+    email: 'correo',
+    password: '123',
+    rol: 'admin_general',
+    id_sucursal: 1
   });
   assert.equal(invalid.error.code, 'VALIDATION_ERROR');
 });

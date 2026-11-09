@@ -6,6 +6,9 @@
   "scripts": {
     "start": "npm --prefix backend start",
     "dev": "npm --prefix backend run dev",
-    "check": "npm --prefix backend run check"
+    "frontend:web": "npm --prefix frontend run web",
+    "frontend:android": "npm --prefix frontend run android",
+    "frontend:ios": "npm --prefix frontend run ios",
+    "check": "npm --prefix backend run check && npm --prefix frontend run typecheck"
   }
 }

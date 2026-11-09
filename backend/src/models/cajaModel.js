@@ -1,0 +1,132 @@
+const { pool } = require('../config/db');
+
+async function findAll({ branchId, userId } = {}) {
+  const values = [];
+  const conditions = [];
+
+  if (branchId) {
+    values.push(branchId);
+    conditions.push(`ct.id_sucursal = $${values.length}`);
+  }
+
+  if (userId) {
+    values.push(userId);
+    conditions.push(`ct.id_usuario = $${values.length}`);
+  }
+
+  const { rows } = await pool.query(
+    `SELECT ct.id_caja, ct.fecha_apertura, ct.fecha_cierre, ct.monto_inicial,
+            ct.total_calculado, ct.monto_declarado, ct.estado, ct.id_usuario,
+            u.nombre AS nombre_usuario, ct.id_sucursal
+     FROM caja_turnos ct
+     JOIN usuarios u ON u.id_usuario = ct.id_usuario
+     ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
+     ORDER BY ct.fecha_apertura DESC
+     LIMIT 20`,
+    values
+  );
+  return rows;
+}
+
+async function open({ id_sucursal, id_usuario, monto_inicial }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const user = await client.query(
+      `SELECT 1 FROM usuarios
+       WHERE id_usuario = $1 AND id_sucursal = $2 AND activo = TRUE
+       FOR UPDATE`,
+      [id_usuario, id_sucursal]
+    );
+    if (!user.rowCount) {
+      const error = new Error('El usuario no está activo o no pertenece a la sucursal indicada.');
+      error.status = 400;
+      error.code = 'INVALID_BRANCH_OPERATOR';
+      throw error;
+    }
+
+    const existingOpenShift = await client.query(
+      `SELECT 1 FROM caja_turnos
+       WHERE id_usuario = $1 AND estado = 'abierta'
+       LIMIT 1`,
+      [id_usuario]
+    );
+    if (existingOpenShift.rowCount) {
+      const error = new Error('Ya existe un turno abierto para este usuario.');
+      error.status = 409;
+      error.code = 'SHIFT_ALREADY_OPEN';
+      throw error;
+    }
+
+    const { rows } = await client.query(
+      `INSERT INTO caja_turnos (monto_inicial, id_usuario, id_sucursal, estado)
+       VALUES ($1, $2, $3, 'abierta')
+       RETURNING id_caja, fecha_apertura, fecha_cierre, monto_inicial,
+                 total_calculado, monto_declarado, estado, id_usuario, id_sucursal`,
+      [monto_inicial, id_usuario, id_sucursal]
+    );
+
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function close(id, { monto_declarado }) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const shift = await client.query(
+      `SELECT id_caja, id_sucursal, id_usuario, fecha_apertura, monto_inicial, estado
+       FROM caja_turnos
+       WHERE id_caja = $1 AND estado = 'abierta'
+       FOR UPDATE`,
+      [id]
+    );
+
+    if (!shift.rowCount) {
+      const error = new Error('No se encontró un turno abierto con ese identificador.');
+      error.status = 404;
+      error.code = 'SHIFT_NOT_FOUND';
+      throw error;
+    }
+
+    const current = shift.rows[0];
+    const total = await client.query(
+      `SELECT COALESCE(SUM(total_productos), 0) AS total_calculado
+       FROM ventas
+       WHERE id_sucursal = $1
+         AND id_usuario = $2
+         AND DATE(fecha_venta) = DATE($3)`,
+      [current.id_sucursal, current.id_usuario, current.fecha_apertura]
+    );
+
+    const { rows } = await client.query(
+      `UPDATE caja_turnos
+       SET fecha_cierre = NOW(),
+           monto_declarado = $2,
+           total_calculado = $3,
+           estado = 'cerrada'
+       WHERE id_caja = $1
+       RETURNING id_caja, fecha_apertura, fecha_cierre, monto_inicial,
+                 total_calculado, monto_declarado, estado, id_usuario, id_sucursal`,
+      [id, monto_declarado, Number(total.rows[0].total_calculado || 0)]
+    );
+
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { findAll, open, close };

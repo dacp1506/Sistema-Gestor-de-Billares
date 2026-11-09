@@ -2,7 +2,9 @@ const Sesion = require('../models/sesionModel');
 const { httpError } = require('../middlewares/validate');
 
 async function list(request, response) {
-  const branchId = request.query.id_sucursal;
+  const branchId = request.user.rol === 'admin_general'
+    ? request.query.id_sucursal
+    : request.user.id_sucursal;
   if (branchId && !/^[1-9]\d*$/.test(String(branchId))) {
     throw httpError(400, 'INVALID_BRANCH_ID', 'id_sucursal debe ser un entero positivo.');
   }
@@ -13,7 +15,9 @@ async function list(request, response) {
 }
 
 async function listActive(request, response) {
-  const branchId = request.query.id_sucursal;
+  const branchId = request.user.rol === 'admin_general'
+    ? request.query.id_sucursal
+    : request.user.id_sucursal;
   if (branchId && !/^[1-9]\d*$/.test(String(branchId))) {
     throw httpError(400, 'INVALID_BRANCH_ID', 'id_sucursal debe ser un entero positivo.');
   }
@@ -30,7 +34,11 @@ async function get(request, response, next) {
 }
 
 async function start(request, response) {
-  response.status(201).json({ data: await Sesion.start(request.body) });
+  const input = {
+    ...request.body,
+    id_usuario: Number(request.user.sub),
+  };
+  response.status(201).json({ data: await Sesion.start(input) });
 }
 
 async function pause(request, response) {

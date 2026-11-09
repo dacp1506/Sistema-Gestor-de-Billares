@@ -51,6 +51,15 @@ async function update(id, { nombre, precio_venta, stock, stock_minimo, categoria
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const existing = await client.query(
+      'SELECT id_producto FROM productos WHERE id_producto = $1 AND activo = TRUE FOR UPDATE',
+      [id]
+    );
+    if (!existing.rowCount) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
     const categoryId = await getOrCreateCategory(client, categoria);
     const { rows } = await client.query(
       `UPDATE productos

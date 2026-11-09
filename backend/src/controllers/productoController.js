@@ -2,7 +2,9 @@ const Producto = require('../models/productoModel');
 const { httpError } = require('../middlewares/validate');
 
 async function list(request, response) {
-  const branchId = request.query.id_sucursal;
+  const branchId = request.user.rol === 'admin_general'
+    ? request.query.id_sucursal
+    : request.user.id_sucursal;
   if (!branchId || !/^[1-9]\d*$/.test(String(branchId))) {
     throw httpError(400, 'BRANCH_REQUIRED', 'Indica la sucursal con ?id_sucursal=.');
   }
@@ -16,10 +18,13 @@ async function get(request, response, next) {
 }
 
 async function create(request, response) {
-  if (!request.validatedBody.id_sucursal) {
+  const input = request.user.rol === 'admin_general'
+    ? request.validatedBody
+    : { ...request.validatedBody, id_sucursal: Number(request.user.id_sucursal) };
+  if (!input.id_sucursal) {
     throw httpError(400, 'BRANCH_REQUIRED', 'id_sucursal es obligatorio al registrar un producto.');
   }
-  const product = await Producto.create(request.validatedBody);
+  const product = await Producto.create(input);
   response.status(201).json({ data: product });
 }
 

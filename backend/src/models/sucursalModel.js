@@ -1,13 +1,21 @@
 const { pool } = require('../config/db');
 
-async function findAll({ includeInactive = false } = {}) {
+async function findAll({ includeInactive = false, branchId } = {}) {
+  const values = [];
+  const conditions = [];
+  if (!includeInactive) conditions.push('estado = TRUE');
+  if (branchId != null) {
+    values.push(branchId);
+    conditions.push(`id_sucursal = $${values.length}`);
+  }
+
   const query = `
     SELECT id_sucursal, nombre, direccion, telefono, estado, creado_en
     FROM sucursales
-    ${includeInactive ? '' : 'WHERE estado = TRUE'}
+    ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
     ORDER BY nombre, id_sucursal
   `;
-  const { rows } = await pool.query(query);
+  const { rows } = await pool.query(query, values);
   return rows;
 }
 

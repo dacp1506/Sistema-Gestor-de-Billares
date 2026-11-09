@@ -3,7 +3,8 @@ const { httpError } = require('../middlewares/validate');
 
 async function list(request, response) {
   const includeInactive = request.query.inactivas === 'true';
-  response.json({ data: await Sucursal.findAll({ includeInactive }) });
+  const branchId = request.user.rol === 'admin_general' ? undefined : request.user.id_sucursal;
+  response.json({ data: await Sucursal.findAll({ includeInactive, branchId }) });
 }
 
 async function get(request, response, next) {

@@ -3,13 +3,14 @@ require('dotenv').config({ path: require('node:path').join(__dirname, '..', '.en
 const app = require('./app');
 
 const port = Number(process.env.PORT || 3000);
+const host = process.env.HOST || '0.0.0.0';
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error('PORT debe ser un número entero entre 1 y 65535.');
 }
 
-const server = app.listen(port, '127.0.0.1', () => {
-  console.log(`Bola8 disponible en http://127.0.0.1:${port}`);
+const server = app.listen(port, host, () => {
+  console.log(`Bola8 disponible en http://${host}:${port}`);
 });
 
 async function shutdown(signal) {

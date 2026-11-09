@@ -130,6 +130,164 @@ function validateStartSession(request, response, next) {
   return next();
 }
 
+function validateCashOpen(request, response, next) {
+  const { id_sucursal, id_usuario, monto_inicial } = request.body || {};
+  const errors = [];
+
+  if (!Number.isSafeInteger(Number(id_sucursal)) || Number(id_sucursal) <= 0) {
+    errors.push('id_sucursal debe ser un entero positivo.');
+  }
+  if (!Number.isSafeInteger(Number(id_usuario)) || Number(id_usuario) <= 0) {
+    errors.push('id_usuario debe ser un entero positivo.');
+  }
+  if (typeof monto_inicial !== 'number' || !Number.isFinite(monto_inicial) || monto_inicial < 0) {
+    errors.push('monto_inicial debe ser un número mayor o igual a cero.');
+  }
+
+  if (errors.length) {
+    return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+  }
+
+  request.validatedBody = {
+    id_sucursal: Number(id_sucursal),
+    id_usuario: Number(id_usuario),
+    monto_inicial: Number(monto_inicial)
+  };
+  return next();
+}
+
+function validateCashClose(request, response, next) {
+  const { monto_declarado } = request.body || {};
+
+  if (typeof monto_declarado !== 'number' || !Number.isFinite(monto_declarado) || monto_declarado < 0) {
+    return next(httpError(400, 'VALIDATION_ERROR', 'monto_declarado debe ser un número mayor o igual a cero.'));
+  }
+
+  request.validatedBody = { monto_declarado: Number(monto_declarado) };
+  return next();
+}
+
+function validateReservation(request, response, next) {
+  const { nombre_cliente, telefono_cliente, fecha_reserva, hora_inicio, duracion_minutos, id_mesa, estado } = request.body || {};
+  const errors = [];
+
+  if (typeof nombre_cliente !== 'string' || !nombre_cliente.trim() || nombre_cliente.trim().length > 120) {
+    errors.push('nombre_cliente es obligatorio y debe tener hasta 120 caracteres.');
+  }
+  if (typeof telefono_cliente !== 'string' || !telefono_cliente.trim() || telefono_cliente.trim().length > 30) {
+    errors.push('telefono_cliente es obligatorio y debe tener hasta 30 caracteres.');
+  }
+  if (typeof fecha_reserva !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha_reserva)) {
+    errors.push('fecha_reserva debe tener formato YYYY-MM-DD.');
+  }
+  if (typeof hora_inicio !== 'string' || !/^\d{2}:\d{2}$/.test(hora_inicio)) {
+    errors.push('hora_inicio debe tener formato HH:MM.');
+  }
+  if (!Number.isSafeInteger(duracion_minutos) || duracion_minutos <= 0 || duracion_minutos > 720) {
+    errors.push('duracion_minutos debe ser un entero entre 1 y 720.');
+  }
+  if (!Number.isSafeInteger(Number(id_mesa)) || Number(id_mesa) <= 0) {
+    errors.push('id_mesa debe ser un entero positivo.');
+  }
+  if (estado != null && !['pendiente', 'confirmada', 'cancelada', 'atendida'].includes(estado)) {
+    errors.push('estado debe ser pendiente, confirmada, cancelada o atendida.');
+  }
+
+  if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+
+  request.validatedBody = {
+    nombre_cliente: nombre_cliente.trim(),
+    telefono_cliente: telefono_cliente.trim(),
+    fecha_reserva,
+    hora_inicio,
+    duracion_minutos: Number(duracion_minutos),
+    id_mesa: Number(id_mesa),
+    estado: estado || 'pendiente'
+  };
+  return next();
+}
+
+function validateReservationStatus(request, response, next) {
+  const { estado } = request.body || {};
+  if (!['pendiente', 'confirmada', 'cancelada', 'atendida'].includes(estado)) {
+    return next(httpError(400, 'VALIDATION_ERROR', 'estado debe ser pendiente, confirmada, cancelada o atendida.'));
+  }
+  request.validatedBody = { estado };
+  return next();
+}
+
+function validateLogin(request, response, next) {
+  const { email, password } = request.body || {};
+  const errors = [];
+
+  if (typeof email !== 'string' || !email.trim() || !emailPattern.test(email.trim())) {
+    errors.push('email debe ser un correo válido.');
+  }
+
+  if (typeof password !== 'string' || !password.trim() || password.trim().length < 6 || password.trim().length > 255) {
+    errors.push('password debe tener entre 6 y 255 caracteres.');
+  }
+
+  if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+
+  request.validatedBody = {
+    email: email.trim().toLowerCase(),
+    password: password.trim()
+  };
+  return next();
+}
+
+function validateUser(request, response, next) {
+  const { nombre, email, password, rol, id_sucursal, activo } = request.body || {};
+  const errors = [];
+
+  if (typeof nombre !== 'string' || !nombre.trim() || nombre.trim().length > 120) {
+    errors.push('nombre es obligatorio y debe tener hasta 120 caracteres.');
+  }
+  if (typeof email !== 'string' || !emailPattern.test(email.trim())) {
+    errors.push('email debe ser un correo válido.');
+  }
+
+  if (request.method === 'POST') {
+    if (typeof password !== 'string' || password.trim().length < 6 || password.trim().length > 255) {
+      errors.push('password debe tener entre 6 y 255 caracteres.');
+    }
+  } else if (password != null && (typeof password !== 'string' || password.trim().length < 6 || password.trim().length > 255)) {
+    errors.push('password debe tener entre 6 y 255 caracteres.');
+  }
+
+  if (!['admin_general', 'admin_sucursal', 'cajero'].includes(rol)) {
+    errors.push('rol debe ser admin_general, admin_sucursal o cajero.');
+  }
+
+  if (rol === 'admin_general') {
+    if (id_sucursal != null && id_sucursal !== '') {
+      errors.push('admin_general no puede pertenecer a una sucursal.');
+    }
+  } else {
+    if (!Number.isSafeInteger(Number(id_sucursal)) || Number(id_sucursal) <= 0) {
+      errors.push('id_sucursal debe ser un entero positivo para roles de sucursal.');
+    }
+  }
+
+  if (activo != null && typeof activo !== 'boolean') {
+    errors.push('activo debe ser verdadero o falso.');
+  }
+
+  if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+
+  request.validatedBody = {
+    nombre: nombre.trim(),
+    email: email.trim().toLowerCase(),
+    password: password?.trim(),
+    rol,
+    id_sucursal: rol === 'admin_general' ? null : Number(id_sucursal),
+    activo: activo ?? true
+  };
+
+  return next();
+}
+
 module.exports = {
   emailPattern,
   httpError,
@@ -138,5 +296,11 @@ module.exports = {
   validateTable,
   validateProduct,
   validateSale,
-  validateStartSession
+  validateStartSession,
+  validateCashOpen,
+  validateCashClose,
+  validateReservation,
+  validateReservationStatus,
+  validateLogin,
+  validateUser
 };
