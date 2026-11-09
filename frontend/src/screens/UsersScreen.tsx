@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { BranchPicker } from '../components/BranchPicker';
+import { useAccessibleModal } from '../hooks/useAccessibleModal';
 import { ApiError } from '../services/api';
 import { listBranches } from '../services/products';
 import { createUser, deactivateUser, listUsers, type User, type UserInput, updateUser } from '../services/users';
@@ -43,6 +45,7 @@ export default function UsersScreen() {
   const [branchError, setBranchError] = useState<string | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [formVisible, setFormVisible] = useState(false);
+  useAccessibleModal(formVisible, () => setFormVisible(false));
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [actingUserId, setActingUserId] = useState<number | string | null>(null);
@@ -269,24 +272,61 @@ export default function UsersScreen() {
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Nombre completo</Text>
-              <TextInput onChangeText={(value) => setForm((current) => ({ ...current, nombre: value }))} style={styles.input} value={form.nombre} />
+              <TextInput accessibilityLabel="Nombre completo" onChangeText={(value) => setForm((current) => ({ ...current, nombre: value }))} style={styles.input} value={form.nombre} />
             </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Correo</Text>
-              <TextInput autoCapitalize="none" keyboardType="email-address" onChangeText={(value) => setForm((current) => ({ ...current, email: value }))} style={styles.input} value={form.email} />
+              <TextInput accessibilityLabel="Correo electrónico" autoCapitalize="none" keyboardType="email-address" onChangeText={(value) => setForm((current) => ({ ...current, email: value }))} style={styles.input} value={form.email} />
             </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Contraseña</Text>
-              <TextInput autoCapitalize="none" onChangeText={(value) => setForm((current) => ({ ...current, password: value }))} placeholder="Mínimo 12 caracteres" secureTextEntry style={styles.input} value={form.password} />
+              <TextInput accessibilityLabel="Contraseña del usuario" autoCapitalize="none" onChangeText={(value) => setForm((current) => ({ ...current, password: value }))} placeholder="Mínimo 12 caracteres" secureTextEntry style={styles.input} value={form.password} />
             </View>
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Rol</Text>
-              <View style={styles.segmentRow}>
+              <View
+                accessibilityLabel="Rol del usuario"
+                accessibilityRole="radiogroup"
+                onKeyDownCapture={(event) => {
+                  const key = event.nativeEvent.key;
+                  const options = ['admin_general', 'admin_sucursal', 'cajero'] as const;
+                  const group = Platform.OS === 'web' && typeof document !== 'undefined'
+                    ? document.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Rol del usuario"]')
+                    : null;
+                  const radios = group ? Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]')) : [];
+                  const focusedIndex = Platform.OS === 'web' && typeof document !== 'undefined'
+                    ? radios.indexOf(document.activeElement as HTMLElement)
+                    : -1;
+                  const currentIndex = focusedIndex >= 0 ? focusedIndex : options.indexOf(form.rol);
+                  const forward = key === 'ArrowRight' || key === 'ArrowDown';
+                  const backward = key === 'ArrowLeft' || key === 'ArrowUp';
+                  const activate = key === ' ' || key === 'Enter' || event.nativeEvent.code === 'Space';
+                  if (!forward && !backward && !activate) return;
+
+                  event.preventDefault();
+                  const nextIndex = forward
+                    ? (currentIndex + 1) % options.length
+                    : backward
+                      ? (currentIndex - 1 + options.length) % options.length
+                      : currentIndex;
+                  const nextRole = options[nextIndex];
+                  setForm((current) => ({
+                    ...current,
+                    rol: nextRole,
+                    id_sucursal: nextRole === 'admin_general' ? '' : current.id_sucursal || branchId || '',
+                  }));
+                  if (Platform.OS === 'web') requestAnimationFrame(() => radios[nextIndex]?.focus());
+                }}
+                style={styles.segmentRow}
+              >
                 {(['admin_general', 'admin_sucursal', 'cajero'] as const).map((option) => (
                   <Pressable
+                    aria-checked={form.rol === option}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: form.rol === option }}
                     key={option}
                     onPress={() => setForm((current) => ({ ...current, rol: option, id_sucursal: option === 'admin_general' ? '' : current.id_sucursal || branchId || '' }))}
                     style={[styles.segmentOption, form.rol === option && styles.segmentOptionActive]}
@@ -301,6 +341,7 @@ export default function UsersScreen() {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Sucursal</Text>
                 <TextInput
+                  accessibilityLabel="Sucursal del usuario"
                   keyboardType="numeric"
                   onChangeText={(value) => setForm((current) => ({ ...current, id_sucursal: value }))}
                   placeholder={String(branchId || '')}
@@ -313,10 +354,10 @@ export default function UsersScreen() {
             {formError ? <Text style={styles.inlineError}>{formError}</Text> : null}
 
             <View style={styles.modalActions}>
-              <Pressable onPress={() => setFormVisible(false)} style={[styles.actionButton, styles.secondaryAction]}>
+              <Pressable accessibilityRole="button" onPress={() => setFormVisible(false)} style={[styles.actionButton, styles.secondaryAction]}>
                 <Text style={styles.actionText}>Cancelar</Text>
               </Pressable>
-              <Pressable onPress={submitUser} style={[styles.actionButton, styles.primaryAction]} disabled={submitting}>
+              <Pressable accessibilityRole="button" onPress={submitUser} style={[styles.actionButton, styles.primaryAction]} disabled={submitting}>
                 {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionText}>Guardar</Text>}
               </Pressable>
             </View>

@@ -12,6 +12,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { BranchPicker } from '../components/BranchPicker';
+import { useAccessibleModal } from '../hooks/useAccessibleModal';
 import { ApiError } from '../services/api';
 import type { AuthUser } from '../services/auth';
 import {
@@ -53,6 +54,7 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
   const [listError, setListError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
   const [formVisible, setFormVisible] = useState(false);
+  useAccessibleModal(formVisible, () => setFormVisible(false));
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [sessioningTableId, setSessioningTableId] = useState<number | string | null>(null);
@@ -365,6 +367,7 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Número</Text>
               <TextInput
+                accessibilityLabel="Número de mesa"
                 autoCapitalize="none"
                 onChangeText={(value) => setTableForm((current) => ({ ...current, numero_mesa: value }))}
                 placeholder="Ej. 1"
@@ -377,6 +380,7 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Tipo</Text>
               <TextInput
+                accessibilityLabel="Tipo de mesa"
                 onChangeText={(value) => setTableForm((current) => ({ ...current, tipo_mesa: value }))}
                 placeholder="Pool"
                 placeholderTextColor={colors.textMuted}
@@ -388,6 +392,7 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Tarifa por minuto</Text>
               <TextInput
+                accessibilityLabel="Tarifa por minuto"
                 keyboardType="decimal-pad"
                 onChangeText={(value) => setTableForm((current) => ({ ...current, tarifa_minuto: value }))}
                 placeholder="30"
@@ -402,6 +407,8 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
               <View style={styles.segmentRow}>
                 {(['libre', 'mantenimiento'] as const).map((option) => (
                   <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: tableForm.estado === option }}
                     key={option}
                     onPress={() => setTableForm((current) => ({ ...current, estado: option }))}
                     style={[styles.segmentOption, tableForm.estado === option && styles.segmentOptionActive]}
@@ -415,10 +422,10 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
             {formError ? <Text style={styles.inlineError}>{formError}</Text> : null}
 
             <View style={styles.modalActions}>
-              <Pressable onPress={() => setFormVisible(false)} style={[styles.actionButton, styles.secondaryAction]}>
+              <Pressable accessibilityRole="button" onPress={() => setFormVisible(false)} style={[styles.actionButton, styles.secondaryAction]}>
                 <Text style={styles.actionText}>Cancelar</Text>
               </Pressable>
-              <Pressable onPress={createTableRecord} style={[styles.actionButton, styles.primaryAction]} disabled={submitting}>
+              <Pressable accessibilityRole="button" onPress={createTableRecord} style={[styles.actionButton, styles.primaryAction]} disabled={submitting}>
                 {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionText}>Guardar</Text>}
               </Pressable>
             </View>

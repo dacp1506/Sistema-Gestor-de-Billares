@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -306,6 +307,7 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
             <View style={styles.fieldHalf}>
               <Text style={styles.label}>ID usuario</Text>
               <TextInput
+                accessibilityLabel="ID de usuario del turno"
                 keyboardType="numeric"
                 editable={false}
                 placeholder={String(user.id_usuario)}
@@ -317,6 +319,7 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
             <View style={styles.fieldHalf}>
               <Text style={styles.label}>Monto inicial</Text>
               <TextInput
+                accessibilityLabel="Monto inicial del turno"
                 keyboardType="decimal-pad"
                 onChangeText={(value) => setCashForm((current) => ({ ...current, monto_inicial: value }))}
                 placeholder="200"
@@ -329,6 +332,7 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Monto declarado al cerrar</Text>
             <TextInput
+              accessibilityLabel="Monto declarado al cerrar el turno"
               keyboardType="decimal-pad"
               onChangeText={(value) => setCashForm((current) => ({ ...current, monto_declarado: value }))}
               placeholder="0"
@@ -396,6 +400,7 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>ID usuario</Text>
                 <TextInput
+                  accessibilityLabel="ID de usuario de la venta"
                   keyboardType="numeric"
                   editable={false}
                   placeholder={String(user.id_usuario)}
@@ -406,9 +411,42 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
 
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>Tipo de venta</Text>
-                <View style={styles.segmentRow}>
+                <View
+                  accessibilityLabel="Tipo de venta"
+                  accessibilityRole="radiogroup"
+                  onKeyDownCapture={(event) => {
+                    const key = event.nativeEvent.key;
+                    const options = ['directa', 'mesa'] as const;
+                    const group = Platform.OS === 'web' && typeof document !== 'undefined'
+                      ? document.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Tipo de venta"]')
+                      : null;
+                    const radios = group ? Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]')) : [];
+                    const focusedIndex = Platform.OS === 'web' && typeof document !== 'undefined'
+                      ? radios.indexOf(document.activeElement as HTMLElement)
+                      : -1;
+                    const currentIndex = focusedIndex >= 0 ? focusedIndex : options.indexOf(form.tipo_venta);
+                    const forward = key === 'ArrowRight' || key === 'ArrowDown';
+                    const backward = key === 'ArrowLeft' || key === 'ArrowUp';
+                    const activate = key === ' ' || key === 'Enter' || event.nativeEvent.code === 'Space';
+                    if (!forward && !backward && !activate) return;
+
+                    event.preventDefault();
+                    const nextIndex = forward
+                      ? (currentIndex + 1) % options.length
+                      : backward
+                        ? (currentIndex - 1 + options.length) % options.length
+                        : currentIndex;
+                    const nextOption = options[nextIndex];
+                    setForm((current) => ({ ...current, tipo_venta: nextOption }));
+                    if (Platform.OS === 'web') requestAnimationFrame(() => radios[nextIndex]?.focus());
+                  }}
+                  style={styles.segmentRow}
+                >
                   {(['directa', 'mesa'] as const).map((option) => (
                     <Pressable
+                      aria-checked={form.tipo_venta === option}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: form.tipo_venta === option }}
                       key={option}
                       onPress={() => setForm((current) => ({ ...current, tipo_venta: option }))}
                       style={[styles.segmentOption, form.tipo_venta === option && styles.segmentOptionActive]}
@@ -424,6 +462,7 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>ID sesión de mesa</Text>
                 <TextInput
+                  accessibilityLabel="ID de sesión de mesa"
                   keyboardType="numeric"
                   onChangeText={(value) => setForm((current) => ({ ...current, id_sesion: value }))}
                   placeholder="Ej. 12"
@@ -435,7 +474,7 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
 
             <View style={styles.itemsHeader}>
               <Text style={styles.label}>Productos</Text>
-              <Pressable onPress={addLine} style={styles.addButton}>
+              <Pressable accessibilityRole="button" onPress={addLine} style={styles.addButton}>
                 <Text style={styles.addButtonText}>＋ Añadir</Text>
               </Pressable>
             </View>
@@ -443,6 +482,7 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
             {form.items.map((item, index) => (
               <View key={`line-${index}`} style={styles.itemRow}>
                 <TextInput
+                  accessibilityLabel="ID de producto"
                   keyboardType="numeric"
                   onChangeText={(value) => updateLine(index, 'id_producto', value)}
                   placeholder="ID producto"
@@ -450,13 +490,14 @@ export default function SalesScreen({ user }: { user: AuthUser }) {
                   value={item.id_producto}
                 />
                 <TextInput
+                  accessibilityLabel="Cantidad de producto"
                   keyboardType="numeric"
                   onChangeText={(value) => updateLine(index, 'cantidad', value)}
                   placeholder="Cant."
                   style={[styles.input, styles.itemInputSmall]}
                   value={item.cantidad}
                 />
-                <Pressable onPress={() => removeLine(index)} style={styles.removeButton}>
+                <Pressable accessibilityLabel="Quitar producto" accessibilityRole="button" onPress={() => removeLine(index)} style={styles.removeButton}>
                   <Text style={styles.removeText}>✕</Text>
                 </Pressable>
               </View>

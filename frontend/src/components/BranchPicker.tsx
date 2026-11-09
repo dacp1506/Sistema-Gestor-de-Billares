@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Branch } from '../services/products';
+import { useAccessibleModal } from '../hooks/useAccessibleModal';
 import { colors } from '../theme';
 
 type BranchPickerProps = {
@@ -11,6 +12,7 @@ type BranchPickerProps = {
 
 export function BranchPicker({ branches, selectedBranchId, onSelect }: BranchPickerProps) {
   const [visible, setVisible] = useState(false);
+  useAccessibleModal(visible, () => setVisible(false));
   const selectedBranch = branches.find((branch) => String(branch.id_sucursal) === selectedBranchId);
 
   return (
@@ -39,6 +41,7 @@ export function BranchPicker({ branches, selectedBranchId, onSelect }: BranchPic
                 return (
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                     key={String(branch.id_sucursal)}
                     onPress={() => {
                       onSelect(String(branch.id_sucursal));
@@ -52,7 +55,7 @@ export function BranchPicker({ branches, selectedBranchId, onSelect }: BranchPic
                 );
               })}
             </ScrollView>
-            <Pressable onPress={() => setVisible(false)} style={styles.closeButton}>
+            <Pressable accessibilityRole="button" onPress={() => setVisible(false)} style={styles.closeButton}>
               <Text style={styles.closeText}>Cancelar</Text>
             </Pressable>
           </Pressable>

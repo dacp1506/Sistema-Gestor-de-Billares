@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import type { Product, ProductInput } from '../services/products';
+import { useAccessibleModal } from '../hooks/useAccessibleModal';
 import { colors } from '../theme';
 
 type ProductFormModalProps = {
@@ -49,6 +50,7 @@ export function ProductFormModal({
   onClose,
   onSave,
 }: ProductFormModalProps) {
+  useAccessibleModal(visible, onClose);
   const [values, setValues] = useState<FormValues>(emptyValues);
   const [validationError, setValidationError] = useState<string | null>(null);
 

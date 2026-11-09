@@ -10,15 +10,15 @@ Sistema de gestión multi-sucursal para salones de billar. El backend REST está
 ## Configuración
 
 1. Instala las dependencias: `npm --prefix backend install` y `npm --prefix frontend install`.
-2. Copia `backend/.env.example` a `backend/.env` y configura `DATABASE_URL`, `DATABASE_SSL` y un `JWT_SECRET` aleatorio. Puedes generarlo con `node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"`; no lo compartas ni lo subas al repositorio. Además, deja `HOST=0.0.0.0` para que el backend sea accesible desde el teléfono o desde la red local. Para validar el certificado de Supabase, descarga su certificado raíz desde Database Settings → SSL Configuration, guárdalo como `backend/certs/supabase-root.crt` y configura `DATABASE_SSL_CA=certs/supabase-root.crt`.
-3. Copia `frontend/.env.example` a `frontend/.env`. Para navegador local conserva `http://127.0.0.1:3000/api`; si ejecutas la app en un teléfono, cambia el valor por la IP local de tu PC (por ejemplo `http://192.168.1.20:3000/api`).
+2. Copia `backend/.env.example` a `backend/.env` y configura `DATABASE_URL`, `DATABASE_SSL=true` y un `JWT_SECRET` aleatorio. Puedes generarlo con `node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"`; no lo compartas ni lo subas al repositorio. El backend usa HTTP `PORT=3000` por defecto; configura `HOST=0.0.0.0` para acceder desde un teléfono o la red local. El puerto PostgreSQL `5432` es para la base de datos, no para el servidor HTTP. Para validar el certificado de Supabase, descarga su certificado raíz desde Database Settings → SSL Configuration, guárdalo como `backend/certs/supabase-root.crt` y configura `DATABASE_SSL_CA=certs/supabase-root.crt`.
+3. Copia `frontend/.env.example` a `frontend/.env`. Para navegador local conserva `http://127.0.0.1:3000/api`; para un teléfono, usa la IP LAN del PC y el puerto HTTP del backend (por ejemplo `http://192.168.1.20:3000/api`). No pongas la contraseña de Supabase ni `JWT_SECRET` en variables `EXPO_PUBLIC_*`.
 4. Ejecuta `backend/database/schema.sql` en Supabase o con `psql`.
-5. En una base nueva, ejecuta el seed de ejemplo desde `backend/` con `node database/seed.js` para cargar datos de prueba. No lo ejecutes sobre una base que ya tenga datos operativos: el seed usa identificadores fijos.
+5. No ejecutes `backend/database/seed.js` en Supabase ni en una base con datos reales: contiene identificadores fijos, cuentas de demostración y movimientos ficticios. Crea el catálogo desde la interfaz o inserta únicamente datos base revisados con SQL; las ventas, reservas, sesiones y turnos deben generarse por operaciones reales.
 6. Si no existe un usuario `admin_general` activo, ejecuta `node database/create-admin.js` desde `backend/` en una terminal interactiva. El comando pide nombre, correo y contraseña oculta; no crea usuarios vía HTTP ni imprime la contraseña.
-7. Inicia el backend desde la raíz con `npm start`.
-8. Inicia el cliente web con `npm run frontend:web` o la aplicación móvil con `npm run frontend:android` / `npm run frontend:ios`.
+7. Desde la raíz del repositorio, inicia el backend con `npm start`; con la configuración de ejemplo queda en `http://localhost:3000`.
+8. Inicia Expo Web con `npm run frontend:web` o la app móvil con `npm run frontend:android` / `npm run frontend:ios`. Abre la URL que informa Expo (habitualmente `http://localhost:8081`).
 
-Las configuraciones locales `backend/.env` y `frontend/.env` no se incluyen en el repositorio. La primera pantalla Expo presenta Productos/Inventario y consume la API; `views/index.html` y sus datos en memoria se conservan solo como referencia visual.
+Las configuraciones locales `backend/.env` y `frontend/.env` no se incluyen en el repositorio. Expo presenta primero el login; después del inicio de sesión ofrece Mesas y sesiones, Caja/ventas, Reservas, Inventario y Usuarios según el rol. Las pantallas consumen la API REST. `views/index.html` y sus datos en memoria se conservan solo como referencia visual.
 
 ## Estructura
 
@@ -56,11 +56,11 @@ frontend/
     theme.ts
 ```
 
-Los controladores implementados abarcan sucursales, mesas, productos, sesiones de mesa y ventas POS. Los modelos ejecutan consultas parametrizadas; ventas y control de sesiones usan transacciones PostgreSQL.
+Los controladores implementados abarcan sucursales, usuarios, mesas, productos, sesiones, reservas, caja y ventas POS. Los modelos usan consultas parametrizadas; las operaciones de ventas mantienen transacciones PostgreSQL.
 
-El cliente Expo se generó con la plantilla TypeScript en blanco y se habilitó el runtime para web. El primer módulo implementa listado, búsqueda, alta, edición y desactivación de productos. Sus solicitudes están centralizadas en servicios API.
+El cliente Expo se generó con la plantilla TypeScript en blanco y se habilitó el runtime web. Incluye login JWT y pantallas para inventario, mesas/sesiones, caja/ventas POS, reservas y usuarios. Sus solicitudes están centralizadas en servicios API.
 
-También se incluye un seed de ejemplo en `backend/database/seed.js` para cargar datos de prueba útiles en sucursales, usuarios, productos, mesas, sesiones, ventas, reservas y turnos de caja. Esto permite validar cada flujo sin tener que crear registros a mano desde la interfaz.
+`backend/database/seed.js` es un seed legado y no debe ejecutarse hasta corregirlo y validarlo: usa IDs fijos, cuentas de demostración y actividad ficticia; además, un detalle de venta no cumple la restricción de subtotal del esquema. Para datos reales, crea el catálogo desde la interfaz o usa SQL revisado.
 
 ## API disponible
 
@@ -72,6 +72,8 @@ También se incluye un seed de ejemplo en `backend/database/seed.js` para cargar
 - `GET|POST /api/mesas` y `GET|PUT|DELETE /api/mesas/:id` — administrar mesas.
 - `GET /api/productos?id_sucursal=:id` — listar el inventario de una sucursal.
 - `GET|POST /api/productos` y `GET|PUT|DELETE /api/productos/:id` — administrar productos.
+- `GET|POST /api/usuarios` y `GET|PUT|DELETE /api/usuarios/:id` — administrar usuarios (solo `admin_general`).
+- `GET /api/caja`, `POST /api/caja/apertura` y `PATCH /api/caja/:id/cerrar` — consultar y controlar turnos de caja.
 - `GET|POST /api/ventas` — historial y registro transaccional POS.
 - `GET /api/sesiones` y `/api/sesiones/activas` — consultar sesiones.
 - `POST /api/sesiones` y `PATCH /api/sesiones/:id/{pausar,reanudar,finalizar}` — controlar cronómetros.
@@ -84,14 +86,9 @@ Para registrar ventas se requieren `id_sucursal`, `id_usuario`, `tipo_venta` (`d
 
 Las reservas validan mesa activa, horario válido y conflicto de solapamiento dentro de la misma mesa para evitar duplicados en la misma franja.
 
-## Credenciales demo
+## Acceso inicial
 
-El seed crea usuarios de ejemplo con contraseñas reales para probar el flujo de autenticación:
-
-- `admin@bola8.com` / `Bola8Admin2026!`
-- `marta@bola8.com` / `MartaBola8-2026`
-- `juan@bola8.com` / `JuanBola8-2026!`
-- `clara@bola8.com` / `ClaraBola8-2026!`
+No se publican credenciales de demostración. En una base nueva, crea el primer administrador mediante `node database/create-admin.js` desde `backend/`; el script solicita la contraseña de forma interactiva y la almacena como hash.
 
 ## Validación
 
@@ -99,6 +96,6 @@ El seed crea usuarios de ejemplo con contraseñas reales para probar el flujo de
 npm run check
 ```
 
-Ejecuta `npm run frontend:web` para abrir Expo en navegador. Las pruebas unitarias y de tipos no requieren base de datos. Para acceder a la API, configura PostgreSQL en `backend/.env`; si PostgreSQL no está disponible o el URI apunta a una base inexistente, la API devuelve un error `503` sanitizado. CORS permite por defecto solo los orígenes locales de Expo `http://localhost:8081` y `http://127.0.0.1:8081`; modifica `FRONTEND_ORIGINS` en `backend/.env` si cambian.
+`npm run check` ejecuta las pruebas backend y el typecheck del frontend. Este último usa una pila de Node ampliada porque TypeScript 6 puede exceder la pila predeterminada en este proyecto. Ejecuta `npm run frontend:web` para abrir Expo en navegador. Las pruebas unitarias y de tipos no requieren base de datos. Para usar la API, configura PostgreSQL en `backend/.env`; si PostgreSQL no está disponible o el URI apunta a una base inexistente, la API devuelve un error `503` sanitizado. En desarrollo CORS admite localhost y direcciones LAN; antes de publicar, restringe `FRONTEND_ORIGINS` a los orígenes del despliegue.
 
 El cliente Expo presenta una pantalla de login y añade el JWT a las llamadas API. La configuración de firma se toma de `JWT_SECRET`; en producción el servidor no inicia si falta. Las contraseñas nuevas usan scrypt con sal aleatoria; los hashes SHA-256 heredados se actualizan automáticamente al iniciar sesión correctamente. Antes de operaciones reales, habilita HTTPS, limita intentos de login y completa pruebas de permisos con una base de datos.

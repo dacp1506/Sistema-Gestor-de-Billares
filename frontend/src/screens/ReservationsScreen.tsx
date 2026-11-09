@@ -193,6 +193,7 @@ export default function ReservationsScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Nombre del cliente</Text>
               <TextInput
+                accessibilityLabel="Nombre del cliente"
                 value={form.nombre_cliente}
                 onChangeText={(value) => setForm((current) => ({ ...current, nombre_cliente: value }))}
                 placeholder="Ana Gómez"
@@ -203,6 +204,7 @@ export default function ReservationsScreen() {
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Teléfono</Text>
               <TextInput
+                accessibilityLabel="Teléfono del cliente"
                 value={form.telefono_cliente}
                 onChangeText={(value) => setForm((current) => ({ ...current, telefono_cliente: value }))}
                 placeholder="70012345"
@@ -215,6 +217,7 @@ export default function ReservationsScreen() {
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>Fecha</Text>
                 <TextInput
+                  accessibilityLabel="Fecha de reserva"
                   value={form.fecha_reserva}
                   onChangeText={(value) => setForm((current) => ({ ...current, fecha_reserva: value }))}
                   placeholder="2026-11-09"
@@ -224,6 +227,7 @@ export default function ReservationsScreen() {
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>Hora</Text>
                 <TextInput
+                  accessibilityLabel="Hora de inicio"
                   value={form.hora_inicio}
                   onChangeText={(value) => setForm((current) => ({ ...current, hora_inicio: value }))}
                   placeholder="19:00"
@@ -236,6 +240,7 @@ export default function ReservationsScreen() {
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>Mesa</Text>
                 <TextInput
+                  accessibilityLabel="ID de mesa"
                   value={form.id_mesa}
                   onChangeText={(value) => setForm((current) => ({ ...current, id_mesa: value }))}
                   placeholder="Ej. 12"
@@ -246,6 +251,7 @@ export default function ReservationsScreen() {
               <View style={styles.fieldHalf}>
                 <Text style={styles.label}>Duración (min)</Text>
                 <TextInput
+                  accessibilityLabel="Duración en minutos"
                   value={form.duracion_minutos}
                   onChangeText={(value) => setForm((current) => ({ ...current, duracion_minutos: value }))}
                   placeholder="90"
@@ -289,10 +295,10 @@ export default function ReservationsScreen() {
                   <Text style={styles.meta}>Mesa {reservation.numero_mesa || reservation.id_mesa} · {reservation.telefono_cliente}</Text>
                   <Text style={styles.meta}>{reservation.fecha_reserva} · {reservation.hora_inicio} ({reservation.duracion_minutos} min)</Text>
                   <View style={styles.actionRow}>
-                    <Pressable onPress={() => updateStatusById(reservation.id_reserva, 'confirmada')} style={styles.actionButtonConfirm}>
+                    <Pressable accessibilityRole="button" onPress={() => updateStatusById(reservation.id_reserva, 'confirmada')} style={styles.actionButtonConfirm}>
                       <Text style={styles.actionTextConfirm}>Confirmar</Text>
                     </Pressable>
-                    <Pressable onPress={() => updateStatusById(reservation.id_reserva, 'cancelada')} style={styles.actionButtonCancel}>
+                    <Pressable accessibilityRole="button" onPress={() => updateStatusById(reservation.id_reserva, 'cancelada')} style={styles.actionButtonCancel}>
                       <Text style={styles.actionTextCancel}>Cancelar</Text>
                     </Pressable>
                   </View>
