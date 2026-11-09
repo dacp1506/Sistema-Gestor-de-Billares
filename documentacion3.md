@@ -100,3 +100,7 @@ Se completó el inicio de sesión en Expo y se pasó a exigir JWT en todos los e
 La firma JWT se configura con `JWT_SECRET`; el ejemplo de entorno incluye la variable y producción rechaza el arranque si no está definida. Para una base que aún no tiene un administrador general se agregó `backend/database/create-admin.js`, que crea uno interactivamente con contraseña oculta. La comprobación de la base conectada encontró cero usuarios, por lo que este bootstrap debe ejecutarse antes del primer inicio de sesión; no se modificaron los datos de negocio ni se ejecutó el seed.
 
 Verificación de esta actualización: `npm --prefix backend run check` aprobó 16 pruebas; `npm --prefix frontend run typecheck` aprobó. Prueba HTTP local: health `200`, acceso sin token `401`, acceso con JWT `200`, sucursal ajena `403`, acceso de cajero a usuarios `403`, login incorrecto `401`, y preflight de Expo desde LAN `204`.
+
+### Mejora de contraseñas
+
+Las contraseñas se almacenan ahora con scrypt (sal aleatoria por contraseña y parámetros de coste configurados en el código). Los hashes SHA-256 existentes se verifican en tiempo constante y se reemplazan por scrypt tras un login válido; los nuevos usuarios y cambios de contraseña usan scrypt directamente. El alta de cuentas requiere al menos 12 caracteres en la interfaz y backend. El login mantiene aceptación de longitud heredada para permitir migrar cuentas previas.

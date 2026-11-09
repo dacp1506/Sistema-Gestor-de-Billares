@@ -110,6 +110,10 @@ export default function UsersScreen() {
       setFormError('Nombre, correo y contraseña son obligatorios.');
       return;
     }
+    if (form.password.trim().length < 12) {
+      setFormError('La contraseña debe tener al menos 12 caracteres.');
+      return;
+    }
 
     const payload: UserInput = {
       nombre: form.nombre.trim(),
@@ -275,7 +279,7 @@ export default function UsersScreen() {
 
             <View style={styles.fieldGroup}>
               <Text style={styles.label}>Contraseña</Text>
-              <TextInput autoCapitalize="none" onChangeText={(value) => setForm((current) => ({ ...current, password: value }))} secureTextEntry style={styles.input} value={form.password} />
+              <TextInput autoCapitalize="none" onChangeText={(value) => setForm((current) => ({ ...current, password: value }))} placeholder="Mínimo 12 caracteres" secureTextEntry style={styles.input} value={form.password} />
             </View>
 
             <View style={styles.fieldGroup}>

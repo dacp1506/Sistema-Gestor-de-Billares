@@ -249,11 +249,11 @@ function validateUser(request, response, next) {
   }
 
   if (request.method === 'POST') {
-    if (typeof password !== 'string' || password.trim().length < 6 || password.trim().length > 255) {
-      errors.push('password debe tener entre 6 y 255 caracteres.');
+    if (typeof password !== 'string' || password.trim().length < 12 || password.trim().length > 255) {
+      errors.push('password debe tener entre 12 y 255 caracteres.');
     }
-  } else if (password != null && (typeof password !== 'string' || password.trim().length < 6 || password.trim().length > 255)) {
-    errors.push('password debe tener entre 6 y 255 caracteres.');
+  } else if (password != null && (typeof password !== 'string' || password.trim().length < 12 || password.trim().length > 255)) {
+    errors.push('password debe tener entre 12 y 255 caracteres.');
   }
 
   if (!['admin_general', 'admin_sucursal', 'cajero'].includes(rol)) {

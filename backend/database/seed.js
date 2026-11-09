@@ -36,10 +36,10 @@ async function seed() {
     )));
 
     const usuarios = [
-      { id_usuario: 1, nombre: 'Admin General', email: 'admin@bola8.com', password_hash: hashPassword('admin123'), rol: 'admin_general', id_sucursal: null, activo: true },
-      { id_usuario: 2, nombre: 'Marta Salas', email: 'marta@bola8.com', password_hash: hashPassword('marta123'), rol: 'admin_sucursal', id_sucursal: 1, activo: true },
-      { id_usuario: 3, nombre: 'Juan Pérez', email: 'juan@bola8.com', password_hash: hashPassword('juan123'), rol: 'cajero', id_sucursal: 1, activo: true },
-      { id_usuario: 4, nombre: 'Clara Rojas', email: 'clara@bola8.com', password_hash: hashPassword('clara123'), rol: 'cajero', id_sucursal: 2, activo: true },
+      { id_usuario: 1, nombre: 'Admin General', email: 'admin@bola8.com', password_hash: await hashPassword('Bola8Admin2026!'), rol: 'admin_general', id_sucursal: null, activo: true },
+      { id_usuario: 2, nombre: 'Marta Salas', email: 'marta@bola8.com', password_hash: await hashPassword('MartaBola8-2026'), rol: 'admin_sucursal', id_sucursal: 1, activo: true },
+      { id_usuario: 3, nombre: 'Juan Pérez', email: 'juan@bola8.com', password_hash: await hashPassword('JuanBola8-2026!'), rol: 'cajero', id_sucursal: 1, activo: true },
+      { id_usuario: 4, nombre: 'Clara Rojas', email: 'clara@bola8.com', password_hash: await hashPassword('ClaraBola8-2026!'), rol: 'cajero', id_sucursal: 2, activo: true },
     ];
 
     await Promise.all(usuarios.map((user) => client.query(

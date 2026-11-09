@@ -1,4 +1,4 @@
-const { issueToken, hashPassword } = require('../config/auth');
+const { issueToken, hashPassword, verifyPassword } = require('../config/auth');
 const Usuario = require('../models/usuarioModel');
 const { httpError } = require('../middlewares/validate');
 
@@ -6,8 +6,25 @@ async function login(request, response, next) {
   const { email, password } = request.validatedBody;
 
   const user = await Usuario.findByEmail(email);
-  if (!user || user.password_hash !== hashPassword(password) || !user.activo) {
+  if (!user || !user.activo) {
     return next(httpError(401, 'INVALID_CREDENTIALS', 'Credenciales inválidas o usuario inactivo.'));
+  }
+
+  const passwordCheck = await verifyPassword(password, user.password_hash);
+  if (!passwordCheck.valid) {
+    return next(httpError(401, 'INVALID_CREDENTIALS', 'Credenciales inválidas o usuario inactivo.'));
+  }
+
+  if (passwordCheck.needsRehash) {
+    const replacementHash = await hashPassword(password);
+    const upgraded = await Usuario.upgradePasswordHash(
+      user.id_usuario,
+      user.password_hash,
+      replacementHash,
+    );
+    if (!upgraded) {
+      return next(httpError(401, 'INVALID_CREDENTIALS', 'Las credenciales cambiaron. Inicia sesión nuevamente.'));
+    }
   }
 
   const token = issueToken({

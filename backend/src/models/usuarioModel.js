@@ -45,11 +45,12 @@ async function findByEmail(email) {
 }
 
 async function create({ nombre, email, password, rol, id_sucursal, activo }) {
+  const passwordHash = await hashPassword(password);
   const { rows } = await pool.query(
     `INSERT INTO usuarios (nombre, email, password_hash, rol, id_sucursal, activo)
      VALUES ($1, $2, $3, $4, $5, COALESCE($6, TRUE))
      RETURNING id_usuario, nombre, email, rol, id_sucursal, activo, creado_en`,
-    [nombre, email.toLowerCase(), hashPassword(password), rol, id_sucursal ?? null, activo ?? null]
+    [nombre, email.toLowerCase(), passwordHash, rol, id_sucursal ?? null, activo ?? null]
   );
   return rows[0];
 }
@@ -67,8 +68,9 @@ async function update(id, { nombre, email, password, rol, id_sucursal, activo })
     values.push(email.toLowerCase());
   }
   if (password !== undefined) {
+    const passwordHash = await hashPassword(password);
     fields.push(`password_hash = $${values.length + 1}`);
-    values.push(hashPassword(password));
+    values.push(passwordHash);
   }
   if (rol !== undefined) {
     fields.push(`rol = $${values.length + 1}`);
@@ -91,6 +93,15 @@ async function update(id, { nombre, email, password, rol, id_sucursal, activo })
   return rows[0] || null;
 }
 
+async function upgradePasswordHash(id, expectedHash, replacementHash) {
+  const { rowCount } = await pool.query(
+    `UPDATE usuarios SET password_hash = $3, actualizado_en = NOW()
+     WHERE id_usuario = $1 AND password_hash = $2 AND activo = TRUE`,
+    [id, expectedHash, replacementHash],
+  );
+  return rowCount === 1;
+}
+
 async function deactivate(id) {
   const { rows } = await pool.query(
     `UPDATE usuarios SET activo = FALSE, actualizado_en = NOW()
@@ -101,4 +112,12 @@ async function deactivate(id) {
   return rows[0] || null;
 }
 
-module.exports = { findAll, findById, findByEmail, create, update, deactivate };
+module.exports = {
+  findAll,
+  findById,
+  findByEmail,
+  create,
+  update,
+  upgradePasswordHash,
+  deactivate,
+};

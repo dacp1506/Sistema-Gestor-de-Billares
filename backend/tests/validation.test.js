@@ -132,7 +132,7 @@ test('usuario valida rol y asignación de sucursal', () => {
   const valid = runValidation(validateUser, {
     nombre: 'Ana',
     email: 'ana@bola8.com',
-    password: '123456',
+    password: 'una clave segura',
     rol: 'cajero',
     id_sucursal: 3,
     activo: true
@@ -143,9 +143,19 @@ test('usuario valida rol y asignación de sucursal', () => {
   const invalid = runValidation(validateUser, {
     nombre: 'Ana',
     email: 'correo',
-    password: '123',
+    password: 'corta',
     rol: 'admin_general',
     id_sucursal: 1
   });
   assert.equal(invalid.error.code, 'VALIDATION_ERROR');
+
+  const shortPassword = runValidation(validateUser, {
+    nombre: 'Ana',
+    email: 'ana@bola8.com',
+    password: 'corta',
+    rol: 'cajero',
+    id_sucursal: 3,
+  });
+  assert.equal(shortPassword.error.code, 'VALIDATION_ERROR');
+  assert.match(shortPassword.error.message, /12 y 255/);
 });

@@ -1,6 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { issueToken } = require('../src/config/auth');
+const crypto = require('node:crypto');
+const {
+  issueToken,
+  hashPassword,
+  verifyPassword,
+} = require('../src/config/auth');
 const {
   requireAuth,
   requireRole,
@@ -16,6 +21,38 @@ function runMiddleware(middleware, request) {
   });
   return { error, nextCalled, request };
 }
+
+test('password hashes use a per-password salt and verify securely', async () => {
+  const firstHash = await hashPassword('a strong password');
+  const secondHash = await hashPassword('a strong password');
+
+  assert.match(firstHash, /^scrypt\$32768\$8\$1\$/);
+  assert.notEqual(firstHash, secondHash);
+  assert.deepEqual(await verifyPassword('a strong password', firstHash), {
+    valid: true,
+    needsRehash: false,
+  });
+  assert.deepEqual(await verifyPassword('another password', firstHash), {
+    valid: false,
+    needsRehash: false,
+  });
+});
+
+test('legacy SHA-256 password hashes are accepted only for migration', async () => {
+  const legacyHash = crypto.createHash('sha256').update('legacy password').digest('hex');
+  assert.deepEqual(await verifyPassword('legacy password', legacyHash), {
+    valid: true,
+    needsRehash: true,
+  });
+  assert.deepEqual(await verifyPassword('wrong password', legacyHash), {
+    valid: false,
+    needsRehash: true,
+  });
+  assert.deepEqual(await verifyPassword('anything', 'invalid'), {
+    valid: false,
+    needsRehash: false,
+  });
+});
 
 test('requireAuth rejects missing and invalid bearer tokens', () => {
   const missing = runMiddleware(requireAuth, { headers: {} });

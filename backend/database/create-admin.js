@@ -79,7 +79,7 @@ async function main() {
     await client.query(
       `INSERT INTO usuarios (nombre, email, password_hash, rol, id_sucursal, activo)
        VALUES ($1, $2, $3, 'admin_general', NULL, TRUE)`,
-      [nombre, email, hashPassword(password)],
+      [nombre, email, await hashPassword(password)],
     );
     await client.query('COMMIT');
     console.log(`Administrador creado para ${email}.`);

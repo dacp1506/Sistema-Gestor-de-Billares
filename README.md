@@ -88,10 +88,10 @@ Las reservas validan mesa activa, horario válido y conflicto de solapamiento de
 
 El seed crea usuarios de ejemplo con contraseñas reales para probar el flujo de autenticación:
 
-- `admin@bola8.com` / `admin123`
-- `marta@bola8.com` / `marta123`
-- `juan@bola8.com` / `juan123`
-- `clara@bola8.com` / `clara123`
+- `admin@bola8.com` / `Bola8Admin2026!`
+- `marta@bola8.com` / `MartaBola8-2026`
+- `juan@bola8.com` / `JuanBola8-2026!`
+- `clara@bola8.com` / `ClaraBola8-2026!`
 
 ## Validación
 
@@ -101,4 +101,4 @@ npm run check
 
 Ejecuta `npm run frontend:web` para abrir Expo en navegador. Las pruebas unitarias y de tipos no requieren base de datos. Para acceder a la API, configura PostgreSQL en `backend/.env`; si PostgreSQL no está disponible o el URI apunta a una base inexistente, la API devuelve un error `503` sanitizado. CORS permite por defecto solo los orígenes locales de Expo `http://localhost:8081` y `http://127.0.0.1:8081`; modifica `FRONTEND_ORIGINS` en `backend/.env` si cambian.
 
-El cliente Expo presenta una pantalla de login y añade el JWT a las llamadas API. La configuración de firma se toma de `JWT_SECRET`; en producción el servidor no inicia si falta. Esta implementación es una base para el prototipo: antes de operaciones reales, migra el hash SHA-256 de contraseñas a un algoritmo resistente como scrypt/Argon2, habilita HTTPS y completa pruebas de permisos con una base de datos.
+El cliente Expo presenta una pantalla de login y añade el JWT a las llamadas API. La configuración de firma se toma de `JWT_SECRET`; en producción el servidor no inicia si falta. Las contraseñas nuevas usan scrypt con sal aleatoria; los hashes SHA-256 heredados se actualizan automáticamente al iniciar sesión correctamente. Antes de operaciones reales, habilita HTTPS, limita intentos de login y completa pruebas de permisos con una base de datos.
