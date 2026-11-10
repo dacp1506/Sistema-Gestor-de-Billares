@@ -3,6 +3,8 @@ import { apiRequest } from './api';
 export type Branch = {
   id_sucursal: number | string;
   nombre: string;
+  direccion?: string | null;
+  telefono?: string | null;
   estado: boolean;
 };
 

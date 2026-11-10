@@ -114,8 +114,25 @@ async function findAll({ branchId, limit = 50 } = {}) {
   values.push(limit);
   const { rows } = await pool.query(
     `SELECT v.id_venta, v.fecha_venta, v.tipo_venta, v.total_productos,
-            v.id_sesion, v.id_sucursal, v.id_usuario
+            v.id_sesion, v.id_sucursal, v.id_usuario,
+            s.nombre AS nombre_sucursal, u.nombre AS nombre_usuario,
+            COALESCE(detalles.items, '[]'::json) AS detalles
      FROM ventas v
+     JOIN sucursales s ON s.id_sucursal = v.id_sucursal
+     JOIN usuarios u ON u.id_usuario = v.id_usuario
+     LEFT JOIN LATERAL (
+       SELECT json_agg(json_build_object(
+         'id_detalle', dv.id_detalle,
+         'id_producto', dv.id_producto,
+         'nombre', p.nombre,
+         'cantidad', dv.cantidad,
+         'precio_unitario', dv.precio_unitario,
+         'subtotal', dv.subtotal
+       ) ORDER BY dv.id_detalle) AS items
+       FROM detalle_ventas dv
+       JOIN productos p ON p.id_producto = dv.id_producto
+       WHERE dv.id_venta = v.id_venta
+     ) detalles ON TRUE
      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
      ORDER BY v.fecha_venta DESC
      LIMIT $${values.length}`,

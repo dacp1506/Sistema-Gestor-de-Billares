@@ -10,7 +10,8 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 }
 
 const server = app.listen(port, host, () => {
-  console.log(`Bola8 disponible en http://${host}:${port}`);
+  const browserHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host;
+  console.log(`API Bola8 disponible en http://${browserHost}:${port}/api (salud: /api/health; escuchando en ${host})`);
 });
 
 async function shutdown(signal) {

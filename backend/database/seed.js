@@ -37,23 +37,24 @@ async function seed() {
 
     const usuarios = [
       { id_usuario: 1, nombre: 'Admin General', email: 'admin@bola8.com', password_hash: await hashPassword('Bola8Admin2026!'), rol: 'admin_general', id_sucursal: null, activo: true },
-      { id_usuario: 2, nombre: 'Marta Salas', email: 'marta@bola8.com', password_hash: await hashPassword('MartaBola8-2026'), rol: 'admin_sucursal', id_sucursal: 1, activo: true },
-      { id_usuario: 3, nombre: 'Juan Pérez', email: 'juan@bola8.com', password_hash: await hashPassword('JuanBola8-2026!'), rol: 'cajero', id_sucursal: 1, activo: true },
-      { id_usuario: 4, nombre: 'Clara Rojas', email: 'clara@bola8.com', password_hash: await hashPassword('ClaraBola8-2026!'), rol: 'cajero', id_sucursal: 2, activo: true },
+      { id_usuario: 2, nombre: 'Marta Salas', username: 'marta.salas', email: null, password_hash: await hashPassword('MartaBola8-2026'), rol: 'admin_sucursal', id_sucursal: 1, activo: true },
+      { id_usuario: 3, nombre: 'Juan Pérez', username: 'juan.perez', email: null, password_hash: await hashPassword('JuanBola8-2026!'), rol: 'cajero', id_sucursal: 1, activo: true },
+      { id_usuario: 4, nombre: 'Clara Rojas', username: 'clara.rojas', email: null, password_hash: await hashPassword('ClaraBola8-2026!'), rol: 'cajero', id_sucursal: 2, activo: true },
     ];
 
     await Promise.all(usuarios.map((user) => client.query(
-      `INSERT INTO usuarios (id_usuario, nombre, email, password_hash, rol, id_sucursal, activo, creado_en, actualizado_en)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      `INSERT INTO usuarios (id_usuario, nombre, username, email, password_hash, rol, id_sucursal, activo, creado_en, actualizado_en)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
        ON CONFLICT (id_usuario) DO UPDATE SET
          nombre = EXCLUDED.nombre,
+         username = EXCLUDED.username,
          email = EXCLUDED.email,
          password_hash = EXCLUDED.password_hash,
          rol = EXCLUDED.rol,
          id_sucursal = EXCLUDED.id_sucursal,
          activo = EXCLUDED.activo,
          actualizado_en = NOW()`,
-      [user.id_usuario, user.nombre, user.email, user.password_hash, user.rol, user.id_sucursal, user.activo]
+      [user.id_usuario, user.nombre, user.username ?? null, user.email, user.password_hash, user.rol, user.id_sucursal, user.activo]
     )));
 
     const categorias = [

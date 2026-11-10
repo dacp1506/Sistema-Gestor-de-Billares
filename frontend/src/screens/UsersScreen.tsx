@@ -22,6 +22,7 @@ type Notice = { kind: 'success' | 'error'; text: string } | null;
 
 type UserForm = {
   nombre: string;
+  username: string;
   email: string;
   password: string;
   rol: 'admin_general' | 'admin_sucursal' | 'cajero';
@@ -30,6 +31,7 @@ type UserForm = {
 
 const emptyForm = (): UserForm => ({
   nombre: '',
+  username: '',
   email: '',
   password: '',
   rol: 'cajero',
@@ -58,10 +60,11 @@ export default function UsersScreen() {
     try {
       const result = await listBranches();
       setBranches(result);
+      const activeBranches = result.filter((branch) => branch.estado);
       setBranchId((current) => (
-        result.some((branch) => String(branch.id_sucursal) === current)
+        activeBranches.some((branch) => String(branch.id_sucursal) === current)
           ? current
-          : String(result[0]?.id_sucursal || '')
+          : String(activeBranches[0]?.id_sucursal || '')
       ));
     } catch (error) {
       setBranchError(getErrorMessage(error));
@@ -109,8 +112,12 @@ export default function UsersScreen() {
   };
 
   const submitUser = async () => {
-    if (!form.nombre.trim() || !form.email.trim() || !form.password.trim()) {
-      setFormError('Nombre, correo y contraseña son obligatorios.');
+    const needsEmail = form.rol === 'admin_general';
+    const loginIdentifier = needsEmail ? form.email : form.username;
+    if (!form.nombre.trim() || !loginIdentifier.trim() || !form.password.trim()) {
+      setFormError(needsEmail
+        ? 'Nombre, correo del administrador general y contraseña son obligatorios.'
+        : 'Nombre, nombre de usuario y contraseña son obligatorios.');
       return;
     }
     if (form.password.trim().length < 12) {
@@ -120,7 +127,7 @@ export default function UsersScreen() {
 
     const payload: UserInput = {
       nombre: form.nombre.trim(),
-      email: form.email.trim(),
+      ...(needsEmail ? { email: form.email.trim() } : { username: form.username.trim() }),
       password: form.password.trim(),
       rol: form.rol,
       id_sucursal: form.rol === 'admin_general' ? null : Number(form.id_sucursal || branchId || 0),
@@ -192,7 +199,7 @@ export default function UsersScreen() {
           </View>
 
           <View style={styles.toolbar}>
-            <BranchPicker branches={branches} selectedBranchId={branchId} onSelect={setBranchId} />
+            <BranchPicker branches={branches.filter((branch) => branch.estado)} selectedBranchId={branchId} onSelect={setBranchId} />
           </View>
 
           {branchesLoading ? (
@@ -232,7 +239,7 @@ export default function UsersScreen() {
                 <View style={styles.userHeader}>
                   <View>
                     <Text style={styles.userName}>{user.nombre}</Text>
-                    <Text style={styles.userMeta}>{user.email}</Text>
+                    <Text style={styles.userMeta}>{user.username ? `@${user.username}` : user.email || 'Sin identificador'}</Text>
                     <Text style={styles.userMeta}>{roleLabel(user.rol)} · {user.id_sucursal ? `Sucursal ${user.id_sucursal}` : 'Central'}</Text>
                   </View>
                   <View style={[styles.badge, user.activo ? styles.badgeActive : styles.badgeInactive]}>
@@ -276,8 +283,18 @@ export default function UsersScreen() {
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Correo</Text>
-              <TextInput accessibilityLabel="Correo electrónico" autoCapitalize="none" keyboardType="email-address" onChangeText={(value) => setForm((current) => ({ ...current, email: value }))} style={styles.input} value={form.email} />
+              <Text style={styles.label}>{form.rol === 'admin_general' ? 'Correo del administrador general' : 'Nombre de usuario'}</Text>
+              <TextInput
+                accessibilityLabel={form.rol === 'admin_general' ? 'Correo electrónico' : 'Nombre de usuario'}
+                autoCapitalize="none"
+                keyboardType={form.rol === 'admin_general' ? 'email-address' : 'default'}
+                onChangeText={(value) => setForm((current) => form.rol === 'admin_general'
+                  ? { ...current, email: value }
+                  : { ...current, username: value })}
+                placeholder={form.rol === 'admin_general' ? 'admin@dominio.com' : 'Ej. juan.perez'}
+                style={styles.input}
+                value={form.rol === 'admin_general' ? form.email : form.username}
+              />
             </View>
 
             <View style={styles.fieldGroup}>
@@ -340,13 +357,10 @@ export default function UsersScreen() {
             {form.rol !== 'admin_general' ? (
               <View style={styles.fieldGroup}>
                 <Text style={styles.label}>Sucursal</Text>
-                <TextInput
-                  accessibilityLabel="Sucursal del usuario"
-                  keyboardType="numeric"
-                  onChangeText={(value) => setForm((current) => ({ ...current, id_sucursal: value }))}
-                  placeholder={String(branchId || '')}
-                  style={styles.input}
-                  value={form.id_sucursal}
+                <BranchPicker
+                  branches={branches.filter((branch) => branch.estado)}
+                  selectedBranchId={form.id_sucursal}
+                  onSelect={(value) => setForm((current) => ({ ...current, id_sucursal: value }))}
                 />
               </View>
             ) : null}

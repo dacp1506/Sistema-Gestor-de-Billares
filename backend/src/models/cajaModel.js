@@ -16,10 +16,22 @@ async function findAll({ branchId, userId } = {}) {
 
   const { rows } = await pool.query(
     `SELECT ct.id_caja, ct.fecha_apertura, ct.fecha_cierre, ct.monto_inicial,
-            ct.total_calculado, ct.monto_declarado, ct.estado, ct.id_usuario,
+            CASE WHEN ct.estado = 'abierta'
+              THEN ct.monto_inicial + COALESCE(turn_sales.total_ventas, 0)
+              ELSE ct.total_calculado
+            END AS total_calculado,
+            ct.monto_declarado, ct.estado, ct.id_usuario,
             u.nombre AS nombre_usuario, ct.id_sucursal
      FROM caja_turnos ct
      JOIN usuarios u ON u.id_usuario = ct.id_usuario
+     LEFT JOIN LATERAL (
+       SELECT SUM(v.total_productos) AS total_ventas
+       FROM ventas v
+       WHERE v.id_sucursal = ct.id_sucursal
+         AND v.id_usuario = ct.id_usuario
+         AND v.fecha_venta >= ct.fecha_apertura
+         AND v.fecha_venta <= NOW()
+     ) turn_sales ON TRUE
      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
      ORDER BY ct.fecha_apertura DESC
      LIMIT 20`,
@@ -99,12 +111,17 @@ async function close(id, { monto_declarado }) {
 
     const current = shift.rows[0];
     const total = await client.query(
-      `SELECT COALESCE(SUM(total_productos), 0) AS total_calculado
-       FROM ventas
-       WHERE id_sucursal = $1
-         AND id_usuario = $2
-         AND DATE(fecha_venta) = DATE($3)`,
-      [current.id_sucursal, current.id_usuario, current.fecha_apertura]
+      `SELECT current_shift.monto_inicial +
+                COALESCE(SUM(v.total_productos), 0) AS total_calculado
+       FROM caja_turnos current_shift
+       LEFT JOIN ventas v
+         ON v.id_sucursal = current_shift.id_sucursal
+        AND v.id_usuario = current_shift.id_usuario
+        AND v.fecha_venta >= current_shift.fecha_apertura
+        AND v.fecha_venta <= NOW()
+       WHERE current_shift.id_caja = $1
+       GROUP BY current_shift.monto_inicial`,
+      [id]
     );
 
     const { rows } = await client.query(

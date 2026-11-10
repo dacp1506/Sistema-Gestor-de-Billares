@@ -3,9 +3,9 @@ const Usuario = require('../models/usuarioModel');
 const { httpError } = require('../middlewares/validate');
 
 async function login(request, response, next) {
-  const { email, password } = request.validatedBody;
+  const { identifier, password } = request.validatedBody;
 
-  const user = await Usuario.findByEmail(email);
+  const user = await Usuario.findByLoginIdentifier(identifier);
   if (!user || !user.activo) {
     return next(httpError(401, 'INVALID_CREDENTIALS', 'Credenciales inválidas o usuario inactivo.'));
   }
@@ -30,6 +30,7 @@ async function login(request, response, next) {
   const token = issueToken({
     sub: user.id_usuario,
     email: user.email,
+    username: user.username,
     rol: user.rol,
     id_sucursal: user.id_sucursal,
   });
@@ -39,6 +40,7 @@ async function login(request, response, next) {
     user: {
       id_usuario: user.id_usuario,
       nombre: user.nombre,
+      username: user.username,
       email: user.email,
       rol: user.rol,
       id_sucursal: user.id_sucursal,
@@ -47,4 +49,28 @@ async function login(request, response, next) {
   });
 }
 
-module.exports = { login };
+async function register(request, response) {
+  const user = await Usuario.createFirstAdminGeneral(request.validatedBody);
+  const token = issueToken({
+    sub: user.id_usuario,
+    email: user.email,
+    username: user.username,
+    rol: user.rol,
+    id_sucursal: user.id_sucursal,
+  });
+
+  response.status(201).json({
+    token,
+    user: {
+      id_usuario: user.id_usuario,
+      nombre: user.nombre,
+      username: user.username,
+      email: user.email,
+      rol: user.rol,
+      id_sucursal: user.id_sucursal,
+      activo: user.activo,
+    },
+  });
+}
+
+module.exports = { login, register };

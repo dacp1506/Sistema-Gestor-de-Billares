@@ -1,9 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateBranch, validateTable, validateProduct, validateSale, validateStartSession, validateCashOpen, validateCashClose, validateReservation, validateReservationStatus, validateLogin, validateUser } = require('../src/middlewares/validate');
+const { validateBranch, validateTable, validateProduct, validateSale, validateStartSession, validateCashOpen, validateCashClose, validateReservation, validateReservationStatus, validateLogin, validateRegistration, validateUser } = require('../src/middlewares/validate');
 
-function runValidation(middleware, body, params = {}) {
-  const request = { body, params };
+function runValidation(middleware, body, params = {}, method = 'POST') {
+  const request = { body, params, method };
   let error;
   middleware(request, {}, (nextError) => { error = nextError; });
   return { request, error };
@@ -115,15 +115,36 @@ test('reserva valida datos de cliente, mesa y estado', () => {
 
 test('login valida credenciales mínimas', () => {
   const valid = runValidation(validateLogin, {
-    email: 'ana@bola8.com',
+    identifier: 'Juan.Perez',
     password: '123456'
   });
   assert.equal(valid.error, undefined);
-  assert.equal(valid.request.validatedBody.email, 'ana@bola8.com');
+  assert.equal(valid.request.validatedBody.identifier, 'juan.perez');
 
   const invalid = runValidation(validateLogin, {
-    email: 'correo',
+    identifier: '',
     password: '123'
+  });
+  assert.equal(invalid.error.code, 'VALIDATION_ERROR');
+});
+
+test('registro valida los datos del primer administrador general', () => {
+  const valid = runValidation(validateRegistration, {
+    nombre: '  Ana Bola8 ',
+    email: ' ANA@BOLA8.COM ',
+    password: 'una clave segura',
+  });
+  assert.equal(valid.error, undefined);
+  assert.deepEqual(valid.request.validatedBody, {
+    nombre: 'Ana Bola8',
+    email: 'ana@bola8.com',
+    password: 'una clave segura',
+  });
+
+  const invalid = runValidation(validateRegistration, {
+    nombre: 'Ana',
+    email: 'no-es-email',
+    password: 'corta',
   });
   assert.equal(invalid.error.code, 'VALIDATION_ERROR');
 });
@@ -131,14 +152,26 @@ test('login valida credenciales mínimas', () => {
 test('usuario valida rol y asignación de sucursal', () => {
   const valid = runValidation(validateUser, {
     nombre: 'Ana',
-    email: 'ana@bola8.com',
+    username: 'Ana.Salas',
     password: 'una clave segura',
     rol: 'cajero',
     id_sucursal: 3,
     activo: true
   });
   assert.equal(valid.error, undefined);
+  assert.equal(valid.request.validatedBody.username, 'ana.salas');
   assert.equal(valid.request.validatedBody.id_sucursal, 3);
+
+  const staffWithBlankEmail = runValidation(validateUser, {
+    nombre: 'Ana',
+    username: 'ana.salas',
+    email: '',
+    password: 'una clave segura',
+    rol: 'cajero',
+    id_sucursal: 3
+  });
+  assert.equal(staffWithBlankEmail.error, undefined);
+  assert.equal(staffWithBlankEmail.request.validatedBody.email, null);
 
   const invalid = runValidation(validateUser, {
     nombre: 'Ana',
@@ -149,13 +182,37 @@ test('usuario valida rol y asignación de sucursal', () => {
   });
   assert.equal(invalid.error.code, 'VALIDATION_ERROR');
 
+  const admin = runValidation(validateUser, {
+    nombre: 'Admin',
+    email: 'admin@bola8.com',
+    password: 'una clave segura',
+    rol: 'admin_general',
+    id_sucursal: null
+  });
+  assert.equal(admin.error, undefined);
+  assert.equal(admin.request.validatedBody.email, 'admin@bola8.com');
+
+  const staffEmail = runValidation(validateUser, {
+    nombre: 'Ana',
+    username: 'ana.salas',
+    email: 'ana@example.com',
+    password: 'una clave segura',
+    rol: 'cajero',
+    id_sucursal: 3
+  });
+  assert.equal(staffEmail.error.code, 'VALIDATION_ERROR');
+
   const shortPassword = runValidation(validateUser, {
     nombre: 'Ana',
-    email: 'ana@bola8.com',
+    username: 'ana',
     password: 'corta',
     rol: 'cajero',
     id_sucursal: 3,
   });
   assert.equal(shortPassword.error.code, 'VALIDATION_ERROR');
   assert.match(shortPassword.error.message, /12 y 255/);
+
+  const partialUpdate = runValidation(validateUser, { activo: false }, {}, 'PUT');
+  assert.equal(partialUpdate.error, undefined);
+  assert.deepEqual(partialUpdate.request.validatedBody, { activo: false });
 });

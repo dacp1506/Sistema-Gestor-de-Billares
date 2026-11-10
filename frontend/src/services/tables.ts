@@ -82,6 +82,14 @@ export async function createTable(input: TableInput): Promise<Table> {
   return response.data;
 }
 
+export async function updateTable(id: number | string, input: TableInput): Promise<Table> {
+  const response = await apiRequest<ItemResponse<Table>>(`/mesas/${encodeURIComponent(String(id))}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  return response.data;
+}
+
 export async function createSession(input: SessionStartInput): Promise<TableSession> {
   const response = await apiRequest<ItemResponse<TableSession>>('/sesiones', {
     method: 'POST',

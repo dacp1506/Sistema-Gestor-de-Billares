@@ -1,13 +1,11 @@
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const path = require('node:path');
 const { pool, isDatabaseConfigured } = require('./config/db');
 const errorHandler = require('./middlewares/error-handler');
 const apiRoutes = require('./routes');
 
 const app = express();
-const viewPath = path.join(__dirname, '..', '..', 'views', 'index.html');
 
 const allowedLocalHostnames = new Set([
   'localhost',
@@ -83,9 +81,6 @@ app.use('/api', (request, response, next) => {
 
   return next();
 }, apiRoutes);
-
-app.get('/', (request, response) => response.sendFile(viewPath));
-app.get('/index.html', (request, response) => response.sendFile(viewPath));
 
 app.use((request, response) => {
   response.status(404).json({

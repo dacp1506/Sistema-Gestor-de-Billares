@@ -217,11 +217,12 @@ function validateReservationStatus(request, response, next) {
 }
 
 function validateLogin(request, response, next) {
-  const { email, password } = request.body || {};
+  const { identifier, email, password } = request.body || {};
+  const loginIdentifier = typeof identifier === 'string' ? identifier : email;
   const errors = [];
 
-  if (typeof email !== 'string' || !email.trim() || !emailPattern.test(email.trim())) {
-    errors.push('email debe ser un correo válido.');
+  if (typeof loginIdentifier !== 'string' || !loginIdentifier.trim() || loginIdentifier.trim().length > 255) {
+    errors.push('Ingresa un usuario o correo válido.');
   }
 
   if (typeof password !== 'string' || !password.trim() || password.trim().length < 6 || password.trim().length > 255) {
@@ -231,14 +232,14 @@ function validateLogin(request, response, next) {
   if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
 
   request.validatedBody = {
-    email: email.trim().toLowerCase(),
+    identifier: loginIdentifier.trim().toLowerCase(),
     password: password.trim()
   };
   return next();
 }
 
-function validateUser(request, response, next) {
-  const { nombre, email, password, rol, id_sucursal, activo } = request.body || {};
+function validateRegistration(request, response, next) {
+  const { nombre, email, password } = request.body || {};
   const errors = [];
 
   if (typeof nombre !== 'string' || !nombre.trim() || nombre.trim().length > 120) {
@@ -247,8 +248,41 @@ function validateUser(request, response, next) {
   if (typeof email !== 'string' || !emailPattern.test(email.trim())) {
     errors.push('email debe ser un correo válido.');
   }
+  if (typeof password !== 'string' || password.trim().length < 12 || password.trim().length > 255) {
+    errors.push('password debe tener entre 12 y 255 caracteres.');
+  }
+  if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
 
-  if (request.method === 'POST') {
+  request.validatedBody = {
+    nombre: nombre.trim(),
+    email: email.trim().toLowerCase(),
+    password: password.trim(),
+  };
+  return next();
+}
+
+function validateUser(request, response, next) {
+  const { nombre, username, email, password, rol, id_sucursal, activo } = request.body || {};
+  const creating = request.method === 'POST';
+  const errors = [];
+
+  if ((creating || nombre !== undefined) &&
+      (typeof nombre !== 'string' || !nombre.trim() || nombre.trim().length > 120)) {
+    errors.push('nombre es obligatorio y debe tener hasta 120 caracteres.');
+  }
+
+  if (username != null && (typeof username !== 'string' ||
+      !/^[a-zA-Z0-9._-]{3,60}$/.test(username.trim()))) {
+    errors.push('username debe tener entre 3 y 60 caracteres: letras, números, punto, guion o guion bajo.');
+  }
+  if (email != null && (
+    typeof email !== 'string' ||
+    (email.trim() !== '' && !emailPattern.test(email.trim()))
+  )) {
+    errors.push('email debe ser un correo válido.');
+  }
+
+  if (creating) {
     if (typeof password !== 'string' || password.trim().length < 12 || password.trim().length > 255) {
       errors.push('password debe tener entre 12 y 255 caracteres.');
     }
@@ -257,16 +291,37 @@ function validateUser(request, response, next) {
   }
 
   if (!['admin_general', 'admin_sucursal', 'cajero'].includes(rol)) {
-    errors.push('rol debe ser admin_general, admin_sucursal o cajero.');
+    if (creating || rol !== undefined) errors.push('rol debe ser admin_general, admin_sucursal o cajero.');
   }
 
-  if (rol === 'admin_general') {
+  const effectiveRole = rol;
+  if (effectiveRole === 'admin_general') {
     if (id_sucursal != null && id_sucursal !== '') {
       errors.push('admin_general no puede pertenecer a una sucursal.');
     }
-  } else {
+    if (creating && (typeof email !== 'string' || !emailPattern.test(email.trim()))) {
+      errors.push('El administrador general debe tener un correo válido.');
+    }
+    if (creating && username != null && username !== '') {
+      errors.push('El administrador general debe registrarse con correo, no con nombre de usuario.');
+    }
+    if (!creating && rol !== undefined && email == null) {
+      errors.push('Incluye el correo al cambiar el rol a administrador general.');
+    }
+  } else if (effectiveRole === 'admin_sucursal' || effectiveRole === 'cajero') {
     if (!Number.isSafeInteger(Number(id_sucursal)) || Number(id_sucursal) <= 0) {
-      errors.push('id_sucursal debe ser un entero positivo para roles de sucursal.');
+      if (creating || rol !== undefined || id_sucursal !== undefined) {
+        errors.push('id_sucursal debe ser un entero positivo para roles de sucursal.');
+      }
+    }
+    if (creating && (typeof username !== 'string' || !/^[a-zA-Z0-9._-]{3,60}$/.test(username.trim()))) {
+      errors.push('Los usuarios de sucursal deben tener un nombre de usuario de 3 a 60 caracteres.');
+    }
+    if (creating && email != null && email !== '') {
+      errors.push('Los usuarios de sucursal inician sesión con nombre de usuario, no con correo.');
+    }
+    if (!creating && rol !== undefined && username == null) {
+      errors.push('Incluye un nombre de usuario al cambiar a un rol de sucursal.');
     }
   }
 
@@ -276,14 +331,17 @@ function validateUser(request, response, next) {
 
   if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
 
-  request.validatedBody = {
-    nombre: nombre.trim(),
-    email: email.trim().toLowerCase(),
-    password: password?.trim(),
-    rol,
-    id_sucursal: rol === 'admin_general' ? null : Number(id_sucursal),
-    activo: activo ?? true
-  };
+  request.validatedBody = {};
+  if (nombre !== undefined) request.validatedBody.nombre = nombre.trim();
+  if (username !== undefined) request.validatedBody.username = typeof username === 'string' ? username.trim().toLowerCase() || null : null;
+  if (email !== undefined) request.validatedBody.email = typeof email === 'string' ? email.trim().toLowerCase() || null : null;
+  if (password !== undefined) request.validatedBody.password = password.trim();
+  if (rol !== undefined) request.validatedBody.rol = rol;
+  if (id_sucursal !== undefined || (creating && rol === 'admin_general')) {
+    request.validatedBody.id_sucursal = rol === 'admin_general' ? null : Number(id_sucursal);
+  }
+  if (activo !== undefined) request.validatedBody.activo = activo;
+  if (creating && activo === undefined) request.validatedBody.activo = true;
 
   return next();
 }
@@ -302,5 +360,6 @@ module.exports = {
   validateReservation,
   validateReservationStatus,
   validateLogin,
+  validateRegistration,
   validateUser
 };

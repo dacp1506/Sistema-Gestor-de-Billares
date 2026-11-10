@@ -5,7 +5,8 @@ export type UserRole = 'admin_general' | 'admin_sucursal' | 'cajero';
 export type User = {
   id_usuario: number | string;
   nombre: string;
-  email: string;
+  username?: string | null;
+  email: string | null;
   rol: UserRole;
   id_sucursal: number | string | null;
   activo: boolean;
@@ -14,7 +15,8 @@ export type User = {
 
 export type UserInput = {
   nombre: string;
-  email: string;
+  username?: string;
+  email?: string | null;
   password: string;
   rol: UserRole;
   id_sucursal?: number | null;

@@ -15,7 +15,7 @@ import { listBranches } from '../services/products';
 import { createReservation, listReservations, updateReservationStatus, type Reservation, type ReservationInput } from '../services/reservations';
 import { colors, shadows } from '../theme';
 
-type Notice = { kind: 'success' | 'error'; text: string } | null;
+type Notice = { kind: 'success' | 'error'; text: string };
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -26,15 +26,14 @@ export default function ReservationsScreen() {
   const [loading, setLoading] = useState(false);
   const [branchLoading, setBranchLoading] = useState(true);
   const [notice, setNotice] = useState<Notice>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [branchError, setBranchError] = useState<string | null>(null);
   const [reservationsError, setReservationsError] = useState<string | null>(null);
   const [form, setForm] = useState({
     nombre_cliente: '',
     telefono_cliente: '',
     fecha_reserva: todayISO(),
-    hora_inicio: '19:00',
-    duracion_minutos: '90',
+    hora_inicio: '20:00',
+    duracion_minutos: '2',
     id_mesa: '',
   });
 
@@ -45,9 +44,7 @@ export default function ReservationsScreen() {
       const result = await listBranches();
       setBranches(result);
       setBranchId((current) => (
-        result.some((branch) => String(branch.id_sucursal) === current)
-          ? current
-          : String(result[0]?.id_sucursal || '')
+        result.some((branch) => String(branch.id_sucursal) === current) ? current : String(result[0]?.id_sucursal || '')
       ));
     } catch (error) {
       setBranchError(getErrorMessage(error));
@@ -79,16 +76,11 @@ export default function ReservationsScreen() {
     }
   }, [form.fecha_reserva]);
 
-  useEffect(() => {
-    void loadBranches();
-  }, [loadBranches]);
-
-  useEffect(() => {
-    void loadReservations(branchId);
-  }, [branchId, loadReservations]);
+  useEffect(() => { void loadBranches(); }, [loadBranches]);
+  useEffect(() => { void loadReservations(branchId); }, [branchId, loadReservations]);
 
   const pendingReservations = useMemo(
-    () => reservations.filter((reservation) => reservation.estado !== 'cancelada' && reservation.estado !== 'atendida').length,
+    () => reservations.filter((r) => r.estado !== 'cancelada' && r.estado !== 'atendida').length,
     [reservations],
   );
 
@@ -97,20 +89,12 @@ export default function ReservationsScreen() {
       setNotice({ kind: 'error', text: 'Selecciona una sucursal antes de registrar una reserva.' });
       return;
     }
-
-    const idMesa = Number(form.id_mesa);
-    const duracion = Number(form.duracion_minutos);
-
     if (!form.nombre_cliente.trim()) {
       setNotice({ kind: 'error', text: 'El nombre del cliente es obligatorio.' });
       return;
     }
     if (!form.telefono_cliente.trim()) {
       setNotice({ kind: 'error', text: 'El teléfono del cliente es obligatorio.' });
-      return;
-    }
-    if (!Number.isInteger(idMesa) || idMesa <= 0) {
-      setNotice({ kind: 'error', text: 'Ingresa un id_mesa válido.' });
       return;
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(form.fecha_reserva)) {
@@ -121,6 +105,7 @@ export default function ReservationsScreen() {
       setNotice({ kind: 'error', text: 'La hora debe tener formato HH:MM.' });
       return;
     }
+    const duracion = Number(form.duracion_minutos);
     if (!Number.isInteger(duracion) || duracion <= 0 || duracion > 720) {
       setNotice({ kind: 'error', text: 'La duración debe ser un entero entre 1 y 720 minutos.' });
       return;
@@ -132,20 +117,17 @@ export default function ReservationsScreen() {
       fecha_reserva: form.fecha_reserva,
       hora_inicio: form.hora_inicio,
       duracion_minutos: duracion,
-      id_mesa: idMesa,
+      id_mesa: Number(form.id_mesa),
     };
 
-    setSubmitting(true);
     setNotice(null);
     try {
       await createReservation(payload);
       setNotice({ kind: 'success', text: 'Reserva creada correctamente.' });
-      setForm((current) => ({ ...current, nombre_cliente: '', telefono_cliente: '', id_mesa: '', duracion_minutos: '90', hora_inicio: '19:00' }));
+      setForm((current) => ({ ...current, nombre_cliente: '', telefono_cliente: '', id_mesa: '', duracion_minutos: '2', hora_inicio: '20:00' }));
       await loadReservations(branchId);
     } catch (error) {
       setNotice({ kind: 'error', text: getErrorMessage(error) });
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -158,6 +140,8 @@ export default function ReservationsScreen() {
       setNotice({ kind: 'error', text: getErrorMessage(error) });
     }
   };
+
+  void branchLoading;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -187,124 +171,137 @@ export default function ReservationsScreen() {
         ) : null}
 
         <View style={styles.mainGrid}>
-          <View style={styles.panelCard}>
-            <Text style={styles.panelTitle}>Nueva reserva</Text>
+          <View style={styles.leftPanel}>
+            <View style={styles.panelCard}>
+              <Text style={styles.panelTitle}>Nueva reserva</Text>
 
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Nombre del cliente</Text>
-              <TextInput
-                accessibilityLabel="Nombre del cliente"
-                value={form.nombre_cliente}
-                onChangeText={(value) => setForm((current) => ({ ...current, nombre_cliente: value }))}
-                placeholder="Ana Gómez"
-                style={styles.input}
-              />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Teléfono</Text>
-              <TextInput
-                accessibilityLabel="Teléfono del cliente"
-                value={form.telefono_cliente}
-                onChangeText={(value) => setForm((current) => ({ ...current, telefono_cliente: value }))}
-                placeholder="70012345"
-                style={styles.input}
-                keyboardType="phone-pad"
-              />
-            </View>
-
-            <View style={styles.fieldRow}>
-              <View style={styles.fieldHalf}>
-                <Text style={styles.label}>Fecha</Text>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Nombre del Cliente</Text>
                 <TextInput
-                  accessibilityLabel="Fecha de reserva"
-                  value={form.fecha_reserva}
-                  onChangeText={(value) => setForm((current) => ({ ...current, fecha_reserva: value }))}
-                  placeholder="2026-11-09"
+                  accessibilityLabel="Nombre del cliente"
+                  value={form.nombre_cliente}
+                  onChangeText={(value) => setForm((current) => ({ ...current, nombre_cliente: value }))}
+                  placeholder="Ana Gómez"
                   style={styles.input}
                 />
               </View>
-              <View style={styles.fieldHalf}>
-                <Text style={styles.label}>Hora</Text>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Teléfono</Text>
                 <TextInput
-                  accessibilityLabel="Hora de inicio"
-                  value={form.hora_inicio}
-                  onChangeText={(value) => setForm((current) => ({ ...current, hora_inicio: value }))}
-                  placeholder="19:00"
+                  accessibilityLabel="Teléfono del cliente"
+                  value={form.telefono_cliente}
+                  onChangeText={(value) => setForm((current) => ({ ...current, telefono_cliente: value }))}
+                  placeholder="70012345"
+                  keyboardType="phone-pad"
                   style={styles.input}
                 />
               </View>
+
+              <View style={styles.fieldRow}>
+                <View style={styles.fieldHalf}>
+                  <Text style={styles.label}>Fecha</Text>
+                  <TextInput
+                    accessibilityLabel="Fecha de reserva"
+                    value={form.fecha_reserva}
+                    onChangeText={(value) => setForm((current) => ({ ...current, fecha_reserva: value }))}
+                    placeholder="2026-11-09"
+                    style={styles.input}
+                  />
+                </View>
+                <View style={styles.fieldHalf}>
+                  <Text style={styles.label}>Hora</Text>
+                  <TextInput
+                    accessibilityLabel="Hora de inicio"
+                    value={form.hora_inicio}
+                    onChangeText={(value) => setForm((current) => ({ ...current, hora_inicio: value }))}
+                    placeholder="20:00"
+                    style={styles.input}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.fieldRow}>
+                <View style={styles.fieldHalf}>
+                  <Text style={styles.label}>Mesa</Text>
+                  <TextInput
+                    accessibilityLabel="ID de mesa"
+                    value={form.id_mesa}
+                    onChangeText={(value) => setForm((current) => ({ ...current, id_mesa: value }))}
+                    placeholder="Ej. 12"
+                    style={styles.input}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={styles.fieldHalf}>
+                  <Text style={styles.label}>Duración (min)</Text>
+                  <TextInput
+                    accessibilityLabel="Duración en minutos"
+                    value={form.duracion_minutos}
+                    onChangeText={(value) => setForm((current) => ({ ...current, duracion_minutos: value }))}
+                    placeholder="2"
+                    style={styles.input}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={false}
+                onPress={submitReservation}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+              >
+                {false ? <ActivityIndicator color="#04130d" size="small" /> : <Text style={styles.primaryText}>Confirmar Reserva</Text>}
+              </Pressable>
             </View>
 
-            <View style={styles.fieldRow}>
-              <View style={styles.fieldHalf}>
-                <Text style={styles.label}>Mesa</Text>
-                <TextInput
-                  accessibilityLabel="ID de mesa"
-                  value={form.id_mesa}
-                  onChangeText={(value) => setForm((current) => ({ ...current, id_mesa: value }))}
-                  placeholder="Ej. 12"
-                  style={styles.input}
-                  keyboardType="numeric"
-                />
-              </View>
-              <View style={styles.fieldHalf}>
-                <Text style={styles.label}>Duración (min)</Text>
-                <TextInput
-                  accessibilityLabel="Duración en minutos"
-                  value={form.duracion_minutos}
-                  onChangeText={(value) => setForm((current) => ({ ...current, duracion_minutos: value }))}
-                  placeholder="90"
-                  style={styles.input}
-                  keyboardType="numeric"
-                />
-              </View>
-            </View>
+            <View style={styles.panelCard}>
+              <Text style={styles.panelTitle}>Reservas programadas</Text>
 
-            <Pressable
-              accessibilityRole="button"
-              disabled={submitting || !branchId}
-              onPress={submitReservation}
-              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, (!branchId || submitting) && styles.disabledButton]}
-            >
-              {submitting ? <ActivityIndicator color="#04130d" size="small" /> : <Text style={styles.primaryText}>Guardar reserva</Text>}
-            </Pressable>
+              {loading ? (
+                <View style={styles.loaderWrap}>
+                  <ActivityIndicator color={colors.accent} size="small" />
+                  <Text style={styles.loaderText}>Cargando reservas…</Text>
+                </View>
+              ) : reservationsError ? (
+                <StatusCard title={reservationsError} tone="error" />
+              ) : !reservations.length ? (
+                <Text style={styles.emptyText}>No hay reservas para la fecha seleccionada.</Text>
+              ) : (
+                <View style={styles.reservationsList}>
+                  {reservations.map((reservation) => (
+                    <View key={String(reservation.id_reserva)} style={styles.reservationCard}>
+                      <View style={styles.reservationHeader}>
+                        <Text style={styles.reservationClient}>{reservation.nombre_cliente}</Text>
+                        <View style={styles.reservationBadgeRow}>
+                          <View style={[styles.badge, styles.badgePending]}>PENDIENTE</View>
+                        </View>
+                      </View>
+                      <View style={styles.reservationDetails}>
+                        <Text style={styles.reservationMeta}>Mesa {reservation.numero_mesa || reservation.id_mesa}</Text>
+                        <Text style={styles.reservationMeta}>{reservation.telefono_cliente}</Text>
+                        <Text style={styles.reservationMeta}>{reservation.fecha_reserva} · {reservation.hora_inicio} ({reservation.duracion_minutos} min)</Text>
+                      </View>
+                      <View style={styles.reservationActions}>
+                        <Pressable accessibilityRole="button" onPress={() => updateStatusById(reservation.id_reserva, 'confirmada')} style={styles.actionButtonConfirm}>
+                          <Text style={styles.actionTextConfirm}>Confirmar</Text>
+                        </Pressable>
+                        <Pressable accessibilityRole="button" onPress={() => updateStatusById(reservation.id_reserva, 'cancelada')} style={styles.actionButtonCancel}>
+                          <Text style={styles.actionTextCancel}>Cancelar</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
           </View>
 
-          <View style={styles.panelCard}>
-            <Text style={styles.panelTitle}>Reservas programadas</Text>
-
-            {loading ? (
-              <View style={styles.loaderWrap}>
-                <ActivityIndicator color={colors.accent} size="small" />
-                <Text style={styles.loaderText}>Cargando reservas…</Text>
-              </View>
-            ) : reservationsError ? (
-              <StatusCard title={reservationsError} tone="error" />
-            ) : !reservations.length ? (
-              <Text style={styles.emptyText}>No hay reservas para la fecha seleccionada.</Text>
-            ) : (
-              reservations.map((reservation) => (
-                <View key={String(reservation.id_reserva)} style={styles.card}>
-                  <View style={styles.cardHeader}>
-                    <Text style={styles.cardTitle}>{reservation.nombre_cliente}</Text>
-                    <Text style={[styles.badge, reservation.estado === 'pendiente' ? styles.badgePending : reservation.estado === 'confirmada' ? styles.badgeConfirmed : reservation.estado === 'cancelada' ? styles.badgeCanceled : styles.badgeServed]}>
-                      {reservation.estado}
-                    </Text>
-                  </View>
-                  <Text style={styles.meta}>Mesa {reservation.numero_mesa || reservation.id_mesa} · {reservation.telefono_cliente}</Text>
-                  <Text style={styles.meta}>{reservation.fecha_reserva} · {reservation.hora_inicio} ({reservation.duracion_minutos} min)</Text>
-                  <View style={styles.actionRow}>
-                    <Pressable accessibilityRole="button" onPress={() => updateStatusById(reservation.id_reserva, 'confirmada')} style={styles.actionButtonConfirm}>
-                      <Text style={styles.actionTextConfirm}>Confirmar</Text>
-                    </Pressable>
-                    <Pressable accessibilityRole="button" onPress={() => updateStatusById(reservation.id_reserva, 'cancelada')} style={styles.actionButtonCancel}>
-                      <Text style={styles.actionTextCancel}>Cancelar</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))
-            )}
+          <View style={styles.rightPanel}>
+            <View style={styles.statusBanner}>
+              <Text style={styles.statusBannerText}>Hoy • Turno Noche</Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -312,15 +309,17 @@ export default function ReservationsScreen() {
   );
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError || error instanceof Error) return error.message;
   return 'Ocurrió un error inesperado.';
 }
 
 function StatusCard({ title, tone = 'info' }: { title: string; tone?: 'info' | 'error' }) {
   return (
-    <View style={[styles.statusCard, tone === 'error' && styles.statusCardError]}>
+    <View style={[
+      styles.statusCard,
+      tone === 'error' && styles.statusCardError,
+    ]}>
       <Text style={[styles.statusText, tone === 'error' && styles.statusTextError]}>{title}</Text>
     </View>
   );
@@ -328,7 +327,10 @@ function StatusCard({ title, tone = 'info' }: { title: string; tone?: 'info' | '
 
 function MetricCard({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
   return (
-    <View style={[styles.metricCard, accent && styles.metricCardAccent]}>
+    <View style={[
+      styles.metricCard,
+      accent && styles.metricCardAccent,
+    ]}>
       <Text style={styles.metricLabel}>{label}</Text>
       <Text style={styles.metricValue}>{value}</Text>
     </View>
@@ -337,7 +339,7 @@ function MetricCard({ label, value, accent = false }: { label: string; value: st
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 18, gap: 18 },
+  content: { padding: 18, gap: 18, width: '100%', maxWidth: 1600, alignSelf: 'center' },
   headerCard: {
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -368,6 +370,8 @@ const styles = StyleSheet.create({
   noticeError: { backgroundColor: 'rgba(251, 113, 133, 0.12)', borderWidth: 1, borderColor: 'rgba(251, 113, 133, 0.35)' },
   noticeText: { color: colors.text, fontWeight: '700' },
   mainGrid: { flexDirection: 'row', gap: 18, flexWrap: 'wrap' },
+  leftPanel: { flex: 1 },
+  rightPanel: { flex: 0.6, paddingLeft: 12 },
   panelCard: {
     flex: 1,
     minWidth: 300,
@@ -376,6 +380,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: 16,
+    ...shadows,
   },
   panelTitle: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 14 },
   fieldGroup: { marginBottom: 12 },
@@ -401,18 +406,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
+    width: '100%',
   },
   primaryText: { color: '#04130d', fontWeight: '800', fontSize: 14 },
   pressed: { opacity: 0.86 },
-  disabledButton: { opacity: 0.5 },
   loaderWrap: { marginTop: 16, alignItems: 'center', paddingVertical: 14 },
   loaderText: { color: colors.textMuted, marginTop: 8 },
   emptyText: { color: colors.textMuted, fontSize: 14, marginTop: 8 },
   statusCard: { marginTop: 12, borderRadius: 12, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border, padding: 12 },
   statusCardError: { backgroundColor: 'rgba(251, 113, 133, 0.08)', borderColor: 'rgba(251, 113, 133, 0.3)' },
   statusText: { color: colors.text, fontWeight: '700' },
-  statusTextError: { color: '#ffd4dc' },
-  card: {
+  reservationsList: { display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 },
+  reservationCard: {
     backgroundColor: colors.surfaceRaised,
     borderRadius: 14,
     borderWidth: 1,
@@ -420,17 +425,19 @@ const styles = StyleSheet.create({
     padding: 12,
     marginTop: 10,
   },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  cardTitle: { color: colors.text, fontWeight: '800', fontSize: 16 },
-  meta: { color: colors.textMuted, marginTop: 4, fontSize: 12 },
+  reservationHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  reservationClient: { color: colors.text, fontWeight: '800', fontSize: 16 },
+  reservationBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   badge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
   badgePending: { backgroundColor: 'rgba(245, 158, 11, 0.14)', color: '#fbbf24' },
-  badgeConfirmed: { backgroundColor: 'rgba(16, 185, 129, 0.14)', color: '#10b981' },
-  badgeCanceled: { backgroundColor: 'rgba(251, 113, 133, 0.12)', color: '#fb7185' },
-  badgeServed: { backgroundColor: 'rgba(56, 189, 248, 0.12)', color: '#38bdf8' },
-  actionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  actionButtonConfirm: { flex: 1, backgroundColor: 'rgba(16, 185, 129, 0.12)', borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
-  actionButtonCancel: { flex: 1, backgroundColor: 'rgba(251, 113, 133, 0.12)', borderRadius: 10, paddingVertical: 8, alignItems: 'center' },
-  actionTextConfirm: { color: colors.accent, fontWeight: '800' },
-  actionTextCancel: { color: colors.danger, fontWeight: '800' },
+  statusBanner: {
+    backgroundColor: 'rgba(40, 27, 6, 0.55)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    padding: 12,
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  statusBannerText: { color: '#fbbf24', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
 });

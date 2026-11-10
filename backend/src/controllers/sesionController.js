@@ -36,7 +36,9 @@ async function get(request, response, next) {
 async function start(request, response) {
   const input = {
     ...request.body,
-    id_usuario: Number(request.user.sub),
+    id_usuario: request.user.rol === 'admin_general'
+      ? Number(request.body.id_usuario)
+      : Number(request.user.sub),
   };
   response.status(201).json({ data: await Sesion.start(input) });
 }

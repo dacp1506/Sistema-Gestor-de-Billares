@@ -21,6 +21,8 @@ export type Sale = {
   id_sesion?: number | null;
   id_sucursal: number | string;
   id_usuario: number | string;
+  nombre_sucursal?: string;
+  nombre_usuario?: string;
   detalles?: Array<{
     id_detalle: number;
     id_producto: number;
@@ -34,10 +36,11 @@ export type Sale = {
 type CollectionResponse<T> = { data: T[] };
 type ItemResponse<T> = { data: T; message?: string };
 
-export async function listSales(branchId: number | string): Promise<Sale[]> {
-  const response = await apiRequest<CollectionResponse<Sale>>(
-    `/ventas?id_sucursal=${encodeURIComponent(String(branchId))}`,
-  );
+export async function listSales(branchId?: number | string): Promise<Sale[]> {
+  const query = branchId == null || branchId === ''
+    ? ''
+    : `?id_sucursal=${encodeURIComponent(String(branchId))}`;
+  const response = await apiRequest<CollectionResponse<Sale>>(`/ventas${query}`);
   return response.data;
 }
 

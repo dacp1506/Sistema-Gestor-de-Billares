@@ -3,7 +3,8 @@ import { apiRequest } from './api';
 export type AuthUser = {
   id_usuario: number | string;
   nombre: string;
-  email: string;
+  username?: string | null;
+  email: string | null;
   rol: 'admin_general' | 'admin_sucursal' | 'cajero';
   id_sucursal: number | string | null;
   activo: boolean;
@@ -14,9 +15,20 @@ type LoginResponse = {
   user: AuthUser;
 };
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(identifier: string, password: string): Promise<LoginResponse> {
   return apiRequest<LoginResponse>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, password }),
+  });
+}
+
+export async function registerAdminGeneral(input: {
+  nombre: string;
+  email: string;
+  password: string;
+}): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(input),
   });
 }

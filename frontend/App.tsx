@@ -2,18 +2,28 @@ import { useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Building2,
   CalendarClock,
   LayoutDashboard,
   LogOut,
   Menu,
   Package,
-  ShoppingBag,
+  ReceiptText,
+  ShoppingCart,
+  Sliders,
+  Wallet,
+  ChartNoAxesCombined,
   Users,
   X,
   type LucideIcon,
 } from 'lucide-react-native';
 import LoginScreen from './src/screens/LoginScreen';
+import BranchesScreen from './src/screens/BranchesScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
+import HistoryScreen from './src/screens/HistoryScreen';
+import PosScreen from './src/screens/PosScreen';
 import ProductsScreen from './src/screens/ProductsScreen';
+import ReportsScreen from './src/screens/ReportsScreen';
 import ReservationsScreen from './src/screens/ReservationsScreen';
 import SalesScreen from './src/screens/SalesScreen';
 import TablesScreen from './src/screens/TablesScreen';
@@ -21,9 +31,10 @@ import UsersScreen from './src/screens/UsersScreen';
 import { useAccessibleModal } from './src/hooks/useAccessibleModal';
 import { setAccessToken } from './src/services/api';
 import type { AuthUser } from './src/services/auth';
+import { clearPosCarts } from './src/services/posCart';
 import { colors } from './src/theme';
 
-type ScreenKey = 'productos' | 'mesas' | 'caja' | 'reservas' | 'usuarios';
+type ScreenKey = 'dashboard' | 'pos' | 'productos' | 'mesas' | 'caja' | 'reservas' | 'historial' | 'reportes' | 'sucursales' | 'usuarios';
 
 type NavigationItem = {
   key: ScreenKey;
@@ -35,24 +46,34 @@ const navigationSections: Array<{ title: string; items: NavigationItem[] }> = [
   {
     title: 'Operación en salón',
     items: [
-      { key: 'mesas', label: 'Dashboard mesas', icon: LayoutDashboard },
-      { key: 'caja', label: 'Caja y ventas POS', icon: ShoppingBag },
+      { key: 'dashboard', label: 'Dashboard Mesas', icon: LayoutDashboard },
+      { key: 'pos', label: 'Control Mesa & POS', icon: ShoppingCart },
       { key: 'reservas', label: 'Reservas', icon: CalendarClock },
+      { key: 'historial', label: 'Historial y Recibos', icon: ReceiptText },
+      { key: 'caja', label: 'Arqueo y Caja', icon: Wallet },
     ],
   },
   {
-    title: 'Administración',
+    title: 'Administración y Finanzas',
     items: [
-      { key: 'productos', label: 'Inventario local', icon: Package },
-      { key: 'usuarios', label: 'Usuarios y roles', icon: Users },
+      { key: 'reportes', label: 'Reportes Financieros', icon: ChartNoAxesCombined },
+      { key: 'mesas', label: 'Mesas y Tarifas/Min', icon: Sliders },
+      { key: 'productos', label: 'Inventario Local', icon: Package },
+      { key: 'sucursales', label: 'Sucursales Cadena', icon: Building2 },
+      { key: 'usuarios', label: 'Usuarios y Roles', icon: Users },
     ],
   },
 ];
 
 const pageDetails: Record<ScreenKey, { title: string; subtitle: string }> = {
-  mesas: { title: 'Dashboard operativo', subtitle: 'Estado de mesas y sesiones de la sucursal' },
-  caja: { title: 'Caja y ventas', subtitle: 'Ventas POS y control de turnos' },
+  dashboard: { title: 'Dashboard operativo', subtitle: 'Estado de mesas, sesiones, caja y ventas de la sucursal' },
+  pos: { title: 'Control de mesa y POS', subtitle: 'Cronómetro, consumos y cobro de la cuenta' },
+  mesas: { title: 'Mesas y tarifas', subtitle: 'Control de disponibilidad y sesiones de juego' },
+  caja: { title: 'Arqueo y caja', subtitle: 'Ventas POS y control de turnos' },
   reservas: { title: 'Reservas', subtitle: 'Agenda de mesas por sucursal' },
+  historial: { title: 'Historial y recibos', subtitle: 'Ventas registradas y comprobantes' },
+  reportes: { title: 'Reportes financieros', subtitle: 'Ingresos registrados por período y sucursal' },
+  sucursales: { title: 'Sucursales', subtitle: 'Administración de locales de la cadena' },
   productos: { title: 'Inventario local', subtitle: 'Productos, precios y existencias' },
   usuarios: { title: 'Usuarios y roles', subtitle: 'Acceso de operadores del sistema' },
 };
@@ -60,7 +81,8 @@ const pageDetails: Record<ScreenKey, { title: string; subtitle: string }> = {
 export default function App() {
   const { width } = useWindowDimensions();
   const compact = width < 960;
-  const [screen, setScreen] = useState<ScreenKey>('mesas');
+  const [screen, setScreen] = useState<ScreenKey>('dashboard');
+  const [posTarget, setPosTarget] = useState<string | undefined>(undefined);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   useAccessibleModal(compact && menuOpen, () => setMenuOpen(false));
@@ -71,7 +93,7 @@ export default function App() {
         <StatusBar style="light" />
         <LoginScreen onLogin={(authenticatedUser) => {
           setUser(authenticatedUser);
-          setScreen('mesas');
+          setScreen('dashboard');
         }} />
       </>
     );
@@ -79,14 +101,54 @@ export default function App() {
 
   const logout = () => {
     setAccessToken(null);
+    clearPosCarts();
     setUser(null);
-    setScreen('mesas');
+    setScreen('dashboard');
+    setPosTarget(undefined);
     setMenuOpen(false);
   };
 
   const selectScreen = (nextScreen: ScreenKey) => {
+    if (nextScreen === 'pos') setPosTarget(undefined);
     setScreen(nextScreen);
     setMenuOpen(false);
+  };
+
+  const openPos = (tableId?: string) => {
+    setPosTarget(tableId);
+    setScreen('pos');
+    setMenuOpen(false);
+  };
+
+  const renderScreen = () => {
+    switch (screen) {
+      case 'dashboard':
+        return <DashboardScreen user={user} onOpenPos={openPos} />;
+      case 'pos':
+        return (
+          <PosScreen
+            user={user}
+            initialTableId={posTarget}
+            onBackToDashboard={() => selectScreen('dashboard')}
+          />
+        );
+      case 'productos':
+        return <ProductsScreen user={user} />;
+      case 'mesas':
+        return <TablesScreen user={user} />;
+      case 'caja':
+        return <SalesScreen user={user} />;
+      case 'reservas':
+        return <ReservationsScreen />;
+      case 'historial':
+        return <HistoryScreen user={user} />;
+      case 'reportes':
+        return <ReportsScreen user={user} />;
+      case 'sucursales':
+        return <BranchesScreen />;
+      case 'usuarios':
+        return <UsersScreen />;
+    }
   };
 
   const renderSidebar = (mobile = false) => (
@@ -119,7 +181,11 @@ export default function App() {
 
       <ScrollView style={styles.navigation} contentContainerStyle={styles.navigationContent}>
         {navigationSections.map((section) => {
-          const items = section.items.filter((item) => item.key !== 'usuarios' || user.rol === 'admin_general');
+          const items = section.items.filter((item) => {
+            if (item.key === 'reportes') return user.rol === 'admin_general' || user.rol === 'admin_sucursal';
+            if (item.key === 'usuarios' || item.key === 'sucursales') return user.rol === 'admin_general';
+            return true;
+          });
           if (!items.length) return null;
 
           return (
@@ -192,15 +258,7 @@ export default function App() {
           </View>
 
           <View style={styles.content}>
-            {screen === 'productos'
-              ? <ProductsScreen user={user} />
-              : screen === 'mesas'
-                ? <TablesScreen user={user} />
-                : screen === 'caja'
-                  ? <SalesScreen user={user} />
-                  : screen === 'reservas'
-                    ? <ReservationsScreen />
-                    : <UsersScreen />}
+            {renderScreen()}
           </View>
         </View>
         {compact && menuOpen ? (

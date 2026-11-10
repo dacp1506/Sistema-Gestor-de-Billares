@@ -115,3 +115,73 @@ Se retomó el Paso 14 de la guía. La app Expo mantiene el flujo real de autenti
 Se agregó `lucide-react-native` con `react-native-svg` para usar iconos compatibles con Expo. Verificación final: `npx expo export --platform web` compiló 2311 módulos y `GET /api/health` respondió HTTP 200 (`database: connected`). Login sin overflow a 390/1440 px; Tab recorre correo/contraseña. En la sesión admin se comprobaron Mesas, Reservas, Caja, Inventario real (Fanta, Bs. 6, stock 10) y Usuarios. El CRUD de producto desde UI quedó verificado con el producto temporal ID 14 y estado inactivo. Una mesa inválida se rechazó y canceló sin escribir. Producto, mesa, selector de sucursal y alta de usuario confinan Tab/Shift+Tab y Escape, y devuelven el foco. Reservas y Caja recorren sus campos con Tab. Tipo de venta y Rol exponen grupos radio con `aria-checked`; flechas cambian selección/foco y Space activa la opción. El drawer móvil cicla Tab/Shift+Tab, cierra con Escape, devuelve el foco y no tiene overflow (`scrollWidth=390`). El typecheck estándar de TypeScript 6 termina con `RangeError: Maximum call stack size exceeded`; `node --stack-size=8192 ./node_modules/typescript/bin/tsc --noEmit` termina sin errores. No se validó Android/iOS nativo.
 
 **Pendiente del Paso 14:** validar accesibilidad/teclado en un dispositivo Android o iOS. **Paso 15:** recorrido CREATE/UPDATE/READ/DELETE lógico completado en el módulo de Productos y validación negativa en Mesas; el producto de prueba ID 14 queda inactivo.
+
+## Continuación 2026-11-09 — Historial y recibos
+
+Se agregó la sección “Historial y recibos” a la navegación lateral para acercar la app Expo a la referencia de `views/index.html`. La pantalla consume la API real de ventas y ofrece filtros por hoy/ayer/todas las fechas, tipo de venta y sucursal; el filtro global está disponible únicamente a `admin_general`. Presenta KPIs calculados sobre las operaciones filtradas, detalle del recibo y formato de impresión para navegador.
+
+`GET /api/ventas` ahora incluye el nombre de sucursal/operador y sus líneas de detalle mediante una agregación parametrizada en PostgreSQL. El historial muestra hasta las 100 operaciones recientes que admite el endpoint, sin simular ni paginar datos inexistentes.
+
+Verificación: backend `npm run check` con 18 pruebas aprobadas; frontend `npm run typecheck` aprobado. El export web y recorrido visual de la sección quedan pendientes de comprobar con el servidor Expo y una cuenta autenticada.
+
+## Continuación — Administración de sucursales
+
+Se integró “Sucursales cadena” a la navegación de Expo y se restringió junto con Usuarios al rol `admin_general`. La pantalla consume `/api/sucursales` y permite consultar sucursales activas, registrar y editar nombre/dirección/teléfono, y desactivar con confirmación; no elimina registros históricos. Los errores de API y validación se muestran en la interfaz.
+
+Verificación: `frontend` `npm run typecheck` aprobado; `npx expo export --platform web` completado (2276 módulos); backend `npm run check` con 18 pruebas aprobadas; `git diff --check` limpio. No se realizó un recorrido autenticado de alta/edición/desactivación en navegador en esta continuación.
+
+## Registro de decisión anterior — Cliente web en `views/index.html` (reemplazado)
+
+**Nueva decisión del estudiante:** el cliente web principal debe quedar implementado en `views/index.html`. Esta decisión actualiza la anterior que mantenía ese archivo solo como maqueta; el proyecto Expo se conserva como cliente multiplataforma alternativo.
+
+El HTML ahora usa el backend Express en el mismo origen, autentica mediante `POST /api/auth/login` y conserva el JWT solo en memoria de la pestaña. Consume la API para inventario (alta, edición y baja lógica), mesas (alta, edición, baja lógica) y sesiones, turnos de caja, ventas directas o de mesa, reservas (alta y cambio de estado), historial/recibos imprimibles, sucursales y usuarios. La sucursal y el usuario de cada operación se envían conforme al contrato actual; el backend sigue siendo quien aplica los permisos y valida los datos. El menú oculta la administración de sucursales/usuarios para roles distintos de `admin_general`; las opciones de modificación del inventario y mesas también respetan los roles disponibles.
+
+Se actualizó el README para indicar que Express sirve el cliente principal en `http://localhost:3000`; Expo permanece como alternativa. Verificación: `npm --prefix backend run check` pasó 18/18 pruebas; el JavaScript inline de `views/index.html` pasó el parser de Node; `git diff --check` pasó. En navegador con respuestas de API simuladas se comprobó login, navegación por todos los módulos, el payload de alta de producto, y que un cajero no ve administración ni acciones de escritura de inventario. A 390 px no hay desbordamiento horizontal; el menú móvil cierra con botón y Escape; a 1440 px tampoco hay desbordamiento. No se pudo hacer una prueba autenticada contra la base real porque el backend no estaba activo en `127.0.0.1:3000`.
+
+### Módulos operativos añadidos a la web
+
+Se añadieron vistas de dashboard (refresco automático cada 30 segundos), POS/control de mesas, arqueo de caja, reportes por período y sucursal, administración de tarifas, sucursal asignada/cadena, configuración local y recibos imprimibles o guardables como PDF. Se incorporaron `GET /api/dashboard` y `GET /api/reportes`; los reportes agregan en PostgreSQL ventas de productos y sesiones finalizadas, sin usar el historial limitado para calcular los totales. Se añadió una prueba del modelo de reportes y se corrigió el filtro de fechas futuras en agregados por sucursal. El dashboard reutiliza la consulta agregada de ventas recientes.
+
+El arqueo aún no puede incluir cobros de alquiler de mesa porque esos cobros no se registran en la base. Los reportes son ingresos registrados y no utilidad neta ni conciliación de pagos; moneda, apariencia y opciones del recibo son preferencias locales. El diseño web usa la misma paleta y navegación general de la maqueta, pero todavía no se ha verificado ni restituido una equivalencia visual pixel por pixel con la versión original de `views/index.html`.
+
+Verificación de esta continuación: `npm --prefix backend run check` pasó 20/20 pruebas, parser de Node para el JavaScript inline aprobado y `git diff --check` limpio. No se verificaron los endpoints contra una base real.
+
+## Decisión actualizada — Expo como aplicación; HTML como maqueta
+
+El estudiante aclaró que `index.html` es una maqueta de referencia, no una pantalla funcional del producto. Se movió la versión original de la maqueta a `DATA TO BUILD/index.html`, se eliminó la implementación funcional que había reemplazado `views/index.html` y Express dejó de servir un cliente en `/` o `/index.html`. El backend es una API y Expo (`frontend/`) es el cliente multiplataforma en desarrollo.
+
+El estudiante espera que el producto pueda operar conectado a internet y que exista la opción de ofrecerlo offline. La funcionalidad offline, la sincronización entre sucursales y los instaladores de escritorio todavía no están implementados. Se requiere definir qué datos y operaciones se autorizan offline, cómo se sincronizan y cómo se resuelven conflictos antes de elegir una estrategia de almacenamiento local.
+
+**Decisión posterior del estudiante:** iniciar online-first; considerar el funcionamiento offline como una ampliación opcional según la necesidad del comprador. Por ello, la primera entrega no debe anunciar ni prometer trabajo offline.
+
+### Dashboard operativo en Expo
+
+Se separó el dashboard de la pantalla de control de mesas; el destino “Dashboard mesas” ya no abre por error el CRUD/control de mesas. La pantalla nueva consume `GET /api/dashboard?id_sucursal=:id`, muestra ocupación, ventas de productos registradas, turnos abiertos, sesiones activas y ventas recientes, con selección de sucursal para `admin_general` y actualización automática cada 30 segundos. Se agregó el tipo/servicio cliente de dashboard. Los alquileres de sesiones activas se etiquetan como estimados; no son cobros registrados.
+
+La aplicación Expo continúa como cliente online multiplataforma. El modo offline y la instalación de escritorio todavía no se implementan. Se excluyó `frontend/dist` generado por Expo del typecheck: su bundle JavaScript podía provocar `RangeError` del compilador TypeScript 6 y no es código fuente que deba typecheckearse.
+
+### Reportes financieros en Expo
+
+Se añadió una pantalla de reportes para `admin_general` y `admin_sucursal`, conectada a `GET /api/reportes`. Permite filtrar períodos diario, semanal, mensual y anual; `admin_general` puede consultar la cadena completa o seleccionar una sucursal. Presenta ingresos registrados, ventas POS, alquiler de sesiones finalizadas, gráfico temporal y agregados por sucursal. La vista advierte que estas cifras no representan utilidad neta ni conciliación de caja. La API y las pruebas de agregación existían antes de esta pantalla.
+
+Verificación: `npm run check` aprobó 20 pruebas backend y el typecheck de Expo; `npx expo export --platform web` completó el bundle web con 2303 módulos. No se validó el reporte con datos de una base real ni en dispositivos Android/iOS.
+
+### Dashboard de mesas interactivo
+
+Se amplió el dashboard Expo para cargar también la lista real de mesas y presentar su estado individual. Desde cada mesa disponible se puede iniciar una sesión; `admin_sucursal` y `cajero` operan con su identidad autenticada, mientras que `admin_general` debe seleccionar un usuario activo de esa sucursal. Se añadió la validación del operador al modelo de sesión existente para comprobar sucursal y estado activo. El dashboard también permite pausar, reanudar y finalizar con confirmación las sesiones, y poner/liberar mesas de mantenimiento para roles administradores. Los cronómetros avanzan localmente entre refrescos de datos; dashboard y lista de mesas se actualizan desde la API cada 30 segundos. Los importes de alquiler en sesiones abiertas se presentan como estimados. Para el rol cajero, el dashboard limita sesiones, ventas y caja a los datos del usuario autenticado.
+
+Verificación: pruebas backend de identidad de inicio de sesión para `admin_general` y roles de sucursal y de alcance de datos de cajero; `npm run check` con 23 pruebas aprobadas; export web Expo compilado (2319 módulos). No se enviaron operaciones de negocio a la base conectada. Falta prueba visual autenticada de los controles con datos de prueba y no se validó Android/iOS nativo.
+
+### Acceso de personal por nombre de usuario
+
+El administrador general conserva el acceso por correo. Las cuentas nuevas de `admin_sucursal` y `cajero` se crean con nombre de usuario único, contraseña y sucursal; el formulario ya no pide correo para esos roles y permite elegir una sucursal existente. El login acepta usuario o correo para mantener compatibilidad con cuentas anteriores. La selección de operador del dashboard vuelve a cargar operadores activos de la sucursal cuando el servidor detecta una asignación vencida o incorrecta, sin relajar la validación del backend.
+
+Para instalaciones nuevas, el esquema ya incluye `username` y permite email nulo para cuentas de sucursal. En bases existentes, ejecutar una vez `backend/database/migrations/add_usernames_to_branch_staff.sql`; conserva los correos anteriores y asigna temporalmente `operador_<id>` a quienes aún no tengan username. Reemplazar esos nombres desde SQL si se desea entregar credenciales personalizadas; la edición del username desde la interfaz aún no está disponible.
+
+Verificación de esta actualización: pruebas backend, typecheck del cliente y export web; no se ejecutó la migración ni se modificaron usuarios en una base conectada.
+
+### Registro inicial desde el login
+
+Se agregó la opción “Registrar administrador” en la pantalla de login y `POST /api/auth/register`. Este registro crea únicamente el primer `admin_general`; se serializa en PostgreSQL y se cierra cuando ya hay una cuenta de ese rol. Así se evita que cualquier visitante pueda registrarse como administrador una vez configurado el sistema. El correo se valida por formato, pero no se verifica por email. Las demás cuentas se crean desde “Usuarios y roles”.
+
+El mensaje `email debe ser un correo válido` ya no aparece cuando el formulario de una cuenta de sucursal envía el campo `email` vacío; si se envía un correo con contenido para un usuario de sucursal, se sigue rechazando.

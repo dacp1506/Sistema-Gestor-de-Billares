@@ -8,7 +8,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { login, type AuthUser } from '../services/auth';
+import { login, registerAdminGeneral, type AuthUser } from '../services/auth';
 import { setAccessToken } from '../services/api';
 import { colors, shadows } from '../theme';
 
@@ -17,17 +17,36 @@ type Props = {
 };
 
 export default function LoginScreen({ onLogin }: Props) {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
+  const [nombre, setNombre] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [registering, setRegistering] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async () => {
     if (submitting) return;
+    if (registering) {
+      if (!nombre.trim() || !identifier.trim() || !password) {
+        setError('Completa tu nombre, correo y contraseña.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Las contraseñas no coinciden.');
+        return;
+      }
+    } else if (!identifier.trim() || !password) {
+      setError('Ingresa tu usuario o correo y contraseña.');
+      return;
+    }
+
     setSubmitting(true);
     setError('');
     try {
-      const result = await login(email.trim(), password);
+      const result = registering
+        ? await registerAdminGeneral({ nombre: nombre.trim(), email: identifier.trim(), password })
+        : await login(identifier.trim(), password);
       setAccessToken(result.token);
       onLogin(result.user);
     } catch (loginError) {
@@ -42,26 +61,41 @@ export default function LoginScreen({ onLogin }: Props) {
       <View style={styles.card}>
         <View style={styles.logo}><Text style={styles.logoText}>8</Text></View>
         <Text style={styles.brand}>BOLA<Text style={styles.brandAccent}>8</Text></Text>
-        <Text style={styles.subtitle}>Inicia sesión para continuar</Text>
+        <Text style={styles.subtitle}>{registering ? 'Crear cuenta de administrador general' : 'Inicia sesión para continuar'}</Text>
+
+        {registering ? (
+          <View style={styles.field}>
+            <Text style={styles.label}>NOMBRE COMPLETO</Text>
+            <TextInput
+              accessibilityLabel="Nombre completo"
+              autoComplete="name"
+              onChangeText={setNombre}
+              placeholder="Tu nombre"
+              placeholderTextColor={colors.textMuted}
+              style={styles.input}
+              value={nombre}
+            />
+          </View>
+        ) : null}
 
         <View style={styles.field}>
-          <Text style={styles.label}>CORREO</Text>
+          <Text style={styles.label}>{registering ? 'CORREO ELECTRÓNICO' : 'USUARIO O CORREO'}</Text>
           <TextInput
-            accessibilityLabel="Correo electrónico"
+            accessibilityLabel={registering ? 'Correo electrónico' : 'Nombre de usuario o correo electrónico'}
             autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            onChangeText={setEmail}
+            autoComplete={registering ? 'email' : 'username'}
+            keyboardType={registering ? 'email-address' : 'default'}
+            onChangeText={setIdentifier}
             onSubmitEditing={submit}
-            placeholder="nombre@bola8.com"
+            placeholder={registering ? 'nombre@dominio.com' : 'usuario o correo@dominio.com'}
             placeholderTextColor={colors.textMuted}
             style={styles.input}
-            value={email}
+            value={identifier}
           />
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>CONTRASEÑA</Text>
+          <Text style={styles.label}>{registering ? 'CONTRASEÑA (MÍNIMO 12 CARACTERES)' : 'CONTRASEÑA'}</Text>
           <TextInput
             accessibilityLabel="Contraseña"
             autoCapitalize="none"
@@ -76,21 +110,59 @@ export default function LoginScreen({ onLogin }: Props) {
           />
         </View>
 
+        {registering ? (
+          <View style={styles.field}>
+            <Text style={styles.label}>CONFIRMAR CONTRASEÑA</Text>
+            <TextInput
+              accessibilityLabel="Confirmar contraseña"
+              autoCapitalize="none"
+              autoComplete="new-password"
+              onChangeText={setConfirmPassword}
+              onSubmitEditing={submit}
+              placeholder="Repite la contraseña"
+              placeholderTextColor={colors.textMuted}
+              secureTextEntry
+              style={styles.input}
+              value={confirmPassword}
+            />
+          </View>
+        ) : null}
+
+        {registering ? (
+          <Text style={styles.registrationNotice}>
+            El registro público solo está disponible para crear el primer administrador general. Después, el administrador crea las cuentas de sucursal.
+          </Text>
+        ) : null}
+
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
         <Pressable
           accessibilityRole="button"
-          disabled={submitting || !email.trim() || !password}
+          disabled={submitting || !identifier.trim() || !password || (registering && (!nombre.trim() || !confirmPassword))}
           onPress={submit}
           style={({ pressed }) => [
             styles.button,
             pressed && styles.pressed,
-            (submitting || !email.trim() || !password) && styles.disabled,
+            (submitting || !identifier.trim() || !password || (registering && (!nombre.trim() || !confirmPassword))) && styles.disabled,
           ]}
         >
           {submitting
             ? <ActivityIndicator color="#04130d" size="small" />
-            : <Text style={styles.buttonText}>Iniciar sesión</Text>}
+            : <Text style={styles.buttonText}>{registering ? 'Crear administrador' : 'Iniciar sesión'}</Text>}
+        </Pressable>
+
+        <Pressable
+          accessibilityRole="button"
+          disabled={submitting}
+          onPress={() => {
+            setRegistering((current) => !current);
+            setError('');
+          }}
+          style={styles.linkButton}
+        >
+          <Text style={styles.linkText}>
+            {registering ? '¿Ya tienes cuenta? Inicia sesión' : '¿Primera vez? Registrar administrador'}
+          </Text>
         </Pressable>
       </View>
     </SafeAreaView>
@@ -156,6 +228,9 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   buttonText: { color: '#04130d', fontSize: 14, fontWeight: '900' },
+  registrationNotice: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
+  linkButton: { alignItems: 'center', paddingTop: 16 },
+  linkText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.82 },
 });
