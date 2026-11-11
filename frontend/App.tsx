@@ -25,7 +25,7 @@ import PosScreen from './src/screens/PosScreen';
 import ProductsScreen from './src/screens/ProductsScreen';
 import ReportsScreen from './src/screens/ReportsScreen';
 import ReservationsScreen from './src/screens/ReservationsScreen';
-import SalesScreen from './src/screens/SalesScreen';
+import ArqueoScreen from './src/screens/ArqueoScreen';
 import TablesScreen from './src/screens/TablesScreen';
 import UsersScreen from './src/screens/UsersScreen';
 import { useAccessibleModal } from './src/hooks/useAccessibleModal';
@@ -69,7 +69,7 @@ const pageDetails: Record<ScreenKey, { title: string; subtitle: string }> = {
   dashboard: { title: 'Dashboard operativo', subtitle: 'Estado de mesas, sesiones, caja y ventas de la sucursal' },
   pos: { title: 'Control de mesa y POS', subtitle: 'Cronómetro, consumos y cobro de la cuenta' },
   mesas: { title: 'Mesas y tarifas', subtitle: 'Control de disponibilidad y sesiones de juego' },
-  caja: { title: 'Arqueo y caja', subtitle: 'Ventas POS y control de turnos' },
+  caja: { title: 'Arqueo y caja', subtitle: 'Arqueo, cierre de turno y conciliación de efectivo' },
   reservas: { title: 'Reservas', subtitle: 'Agenda de mesas por sucursal' },
   historial: { title: 'Historial y recibos', subtitle: 'Ventas registradas y comprobantes' },
   reportes: { title: 'Reportes financieros', subtitle: 'Ingresos registrados por período y sucursal' },
@@ -137,9 +137,9 @@ export default function App() {
       case 'mesas':
         return <TablesScreen user={user} />;
       case 'caja':
-        return <SalesScreen user={user} />;
+        return <ArqueoScreen user={user} />;
       case 'reservas':
-        return <ReservationsScreen />;
+        return <ReservationsScreen user={user} onOpenPos={openPos} />;
       case 'historial':
         return <HistoryScreen user={user} />;
       case 'reportes':

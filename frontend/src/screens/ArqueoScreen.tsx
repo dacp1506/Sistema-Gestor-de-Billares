@@ -6,45 +6,48 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Banknote, Calculator, ReceiptText, X } from 'lucide-react-native';
-import { useAccessibleModal } from '../hooks/useAccessibleModal';
+import { Banknote, Lock, RefreshCw } from 'lucide-react-native';
+import { BranchPicker } from '../components/BranchPicker';
+import { OptionPicker } from '../components/OptionPicker';
 import { ApiError } from '../services/api';
 import type { AuthUser } from '../services/auth';
+import { closeCashShift, listCashShifts, openCashShift, type CashShift } from '../services/cash';
 import { listBranches } from '../services/products';
 import type { Branch } from '../services/products';
+import { listUsers, type User } from '../services/users';
 import { colors, shadows } from '../theme';
 
-type ArqueoData = {
-  initialCash: number;
-  totalSales: number;
-  expectedCash: number;
-  declaredCash: number;
-  difference: number;
-  overShort: 'superplus' | 'plus' | 'zero' | 'minus' | 'superminus';
-};
+type Notice = { kind: 'success' | 'error'; text: string };
 
-function getOverShortLabel(difference: number): 'superplus' | 'plus' | 'zero' | 'minus' | 'superminus' {
-  if (difference > 100) return 'superplus';
-  if (difference > 0) return 'plus';
-  if (difference === 0) return 'zero';
-  if (difference > -100) return 'minus';
-  return 'superminus';
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError || error instanceof Error) return error.message;
+  return 'Ocurrió un error inesperado.';
 }
 
 export default function ArqueoScreen({ user }: { user: AuthUser }) {
   const { width } = useWindowDimensions();
   const compact = width < 760;
   const isGlobalAdmin = user.rol === 'admin_general';
+
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [branchScope, setBranchScope] = useState(isGlobalAdmin ? 'all' : String(user.id_sucursal ?? ''));
-  const [period, setPeriod] = useState<'diario' | 'semanal' | 'mensual' | 'anual'>('diario');
+  const [branchId, setBranchId] = useState(isGlobalAdmin ? '' : String(user.id_sucursal ?? ''));
+  const [shifts, setShifts] = useState<CashShift[]>([]);
+  const [operators, setOperators] = useState<User[]>([]);
+  const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [lastClosedId, setLastClosedId] = useState('');
+  const [declared, setDeclared] = useState('');
+  const [openAmount, setOpenAmount] = useState('200');
+  const [openOperatorId, setOpenOperatorId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [branchLoading, setBranchLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [arqueo, setArqueo] = useState<ArqueoData | null>(null);
-  useAccessibleModal(Boolean(arqueo), () => setArqueo(null));
+  const [branchError, setBranchError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [busy, setBusy] = useState<'open' | 'close' | null>(null);
 
   const loadBranches = useCallback(async () => {
     setBranchLoading(true);
@@ -52,301 +55,686 @@ export default function ArqueoScreen({ user }: { user: AuthUser }) {
     try {
       const result = await listBranches();
       setBranches(result);
-      setBranchScope((current) => (
-        result.some((branch) => String(branch.id_sucursal) === current) ? current : String(result[0]?.id_sucursal || '')
+      setBranchId((current) => (
+        result.some((branch) => String(branch.id_sucursal) === current)
+          ? current
+          : String(result[0]?.id_sucursal || '')
       ));
-    } catch (error) {
-      setBranchError(getErrorMessage(error));
+    } catch (loadError) {
+      setBranchError(getErrorMessage(loadError));
       setBranches([]);
-      setBranchScope('');
+      setBranchId('');
     } finally {
       setBranchLoading(false);
     }
   }, []);
 
-  useEffect(() => { void loadBranches(); }, [loadBranches]);
-
-  const calculateArqueo = useCallback((branchId: string | undefined, period: 'diario' | 'semanal' | 'mensual' | 'anual'): ArqueoData => {
-    const now = new Date();
-    let startDate: Date;
-    
-    switch (period) {
-      case 'diario':
-        startDate = new Date(now.setHours(0, 0, 0, 0));
-        break;
-      case 'semanal':
-        startDate = new Date(now);
-        startDate.setDate(startDate.getDate() - 7);
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case 'mensual':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'anual':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
-      default:
-        startDate = new Date(now.setHours(0, 0, 0, 0));
+  const loadShiftData = useCallback(async (selectedBranchId: string) => {
+    if (!selectedBranchId) {
+      setShifts([]);
+      setOperators([]);
+      setError(null);
+      setLoading(false);
+      return;
     }
 
-    // This would normally call the backend API, but for now we calculate from sales
-    // The backend already has the logic in dashboardModel.js to calculate income
-    
-    // Placeholder calculation using current data
-    let totalSales = 0;
-    let declaredCash = 0;
-    
-    // In a full implementation, this would query ventas and caja_turnos for the period
-    // For now, we'll use a simplified calculation
-    
-    const initialCash = 50.00; // This would come from caja_turnos opening
-    const expectedCash = initialCash + totalSales;
-    const difference = expectedCash - declaredCash;
-    const overShort = getOverShortLabel(difference);
+    setLoading(true);
+    setError(null);
+    try {
+      const [shiftList, userList] = await Promise.all([
+        listCashShifts(selectedBranchId),
+        isGlobalAdmin ? listUsers(selectedBranchId) : Promise.resolve([] as User[]),
+      ]);
+      setShifts(shiftList);
+      setOperators(
+        userList.filter((operator) => (
+          operator.activo && (operator.rol === 'cajero' || operator.rol === 'admin_sucursal')
+        )),
+      );
+    } catch (loadError) {
+      setShifts([]);
+      setOperators([]);
+      setError(getErrorMessage(loadError));
+    } finally {
+      setLoading(false);
+    }
+  }, [isGlobalAdmin]);
 
-    return {
-      initialCash,
-      totalSales,
-      expectedCash,
-      declaredCash,
-      difference,
-      overShort,
-    };
-  }, []);
+  useEffect(() => { void loadBranches(); }, [loadBranches]);
+  useEffect(() => { void loadShiftData(branchId); }, [branchId, loadShiftData]);
+  useEffect(() => { setDeclared(''); }, [branchId]);
 
-  const handlePrint = () => {
-    if (!arqueo || Platform.OS !== 'web' || typeof window === 'undefined') return;
-    const printWindow = window.open('', '_blank', 'width=420,height=700');
-    if (!printWindow) return;
-    
-    const overShortLabel = {
-      superplus: 'Sobresaliente (>$100)',
-      plus: 'Sobrante ($0-$100)',
-      zero: 'Exacto ($0)',
-      minus: 'Falta ($0-$100)',
-      superminus: 'Falta mayor (>$100)',
-    }[arqueo.overShort];
+  const openShifts = useMemo(
+    () => shifts.filter((shift) => shift.estado === 'abierta'),
+    [shifts],
+  );
 
-    printWindow.document.open();
-    printWindow.document.write(`<!doctype html>
-      <html lang="es"><head><meta charset="utf-8"><title>Arqueo de Caja - Bola8</title>
-      <style>
-        @media print {
-          body { margin: 0; padding: 20px; font-family: Arial, sans-serif; color: #0f172a; }
-          .no-print { display: none; }
-          .page { margin-bottom: 40px; border-bottom: 1px solid #cbd5e1; padding-bottom: 20px; }
-          h1, p { text-align: center; }
-          table { width: 100%; border-collapse: collapse; margin: 16px 0; }
-          th, td { text-align: left; padding: 8px 4px; border-bottom: 1px solid #e2e8f0; }
-          .total { text-align: right; font-size: 18px; font-weight: bold; color: #0f172a; }
-          .muted { color: #64748b; font-size: 11px; }
-          .logo { text-align: center; margin-bottom: 20px; }
-          .brand { color: #10b981; font-weight: 900; font-size: 18px; }
-          .receipt-footer { margin-top: 30px; border-top: 1px solid #cbd5e1; padding-top: 20px; }
-        }
-        body { font: 14px Arial, sans-serif; max-width: 360px; margin: 24px auto; color: #111; }
-        h1, p { text-align: center; margin: 6px 0; }
-        h1 { font-size: 20px; }
-        .muted { color: #555; font-size: 12px; }
-        .rule { border-top: 1px dashed #555; margin: 14px 0; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; }
-        th, td { text-align: left; padding: 6px 3px; border-bottom: 1px solid #ddd; }
-        th:last-child, td:last-child { text-align: right; }
-        .total { text-align: right; font-size: 18px; font-weight: bold; }
-        .label { font-weight: 600; color: #334155; }
-        .value { text-align: right; color: #0f172a; }
-        .brand { color: #0f172a; font-size: 15; font-weight: 900; letter-spacing: 2; margin-top: 6; }
-        .concept { color: #64748b; font-size: 11; margin-top: 2; }
-      </style></head><body>
-        <div class="logo"><div class="brand">BOLA8</div><div class="concept">Arqueo de Caja ‒ Bola8</div></div>
-        <div class="rule"></div>
-        <h1>Reporte de Arqueo de Caja</h1>
-        <p class="muted">Período: ${period}</p>
-        <div class="rule"></div>
-        <table style="width:100%; border-collapse:collapse; margin:20px 0;">
-          <thead>
-            <tr>
-              <th style="text-align:left; padding:6px 3px;">Concepto</th>
-              <th style="text-align:right; padding:6px 3px;">Bs.</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td style="text-align:left; font-weight:bold; padding:6px 3px;">Caja inicial</td>
-              <td style="text-align:right; padding:6px 3px;">Bs. ${Number(arqueo?.initialCash || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td style="text-align:left; font-weight:bold; padding:6px 3px;">Ventas totales</td>
-              <td style="text-align:right; padding:6px 3px;">Bs. ${Number(arqueo?.totalSales || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td style="text-align:left; font-weight:bold; padding:6px 3px;">Total esperado</td>
-              <td style="text-align:right; padding:6px 3px;">Bs. ${Number(arqueo?.expectedCash || 0).toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td style="text-align:left; font-weight:bold; padding:6px 3px;">Efectivo declarado</td>
-              <td style="text-align:right; padding:6px 3px;">Bs. ${Number(arqueo?.declaredCash || 0).toFixed(2)}</td>
-            </tr>
-            <tr style="font-weight:bold; ${arqueo?.difference >= 0 ? 'background-color: #d1e7dd;' : 'background-color: #f8d7da;'}>
-              <td style="text-align:left; padding:6px 3px;">Diferencia ${arqueo?.difference >= 0 ? '($+' : '($'}
-              ${Math.abs(arqueo?.difference || 0).toFixed(2)}
-              </td>
-              <td style="text-align:right; padding:6px 3px;">${arqueo?.difference >= 0 ? '+' : ''}${arqueo?.difference?.toFixed(2) || '0,00'}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="rule"></div>
-        <p style="text-align:center; font-size:12px; color:#64748b;">
-          ${overShortLabel}: ${Math.abs(arqueo?.difference || 0) > 0 ? 'Se recomienda revisar las transacciones' : 'Arqueo completo'}
-        </p>
-        <div class="receipt-footer" style="margin-top:30px; border-top:1px solid #cbd5e1; padding-top:20px;">
-          <p class="muted" style="font-size:11px; color:#64748b;">¡Gracias por operar en Bola8!</p>
-        </div>
-      </body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+  const selectedOpenShift = useMemo(
+    () => openShifts.find((shift) => String(shift.id_caja) === selectedShiftId) || openShifts[0] || null,
+    [openShifts, selectedShiftId],
+  );
+
+  const closedShift = useMemo(
+    () => (!selectedOpenShift && lastClosedId
+      ? shifts.find((shift) => String(shift.id_caja) === lastClosedId) || null
+      : null),
+    [lastClosedId, selectedOpenShift, shifts],
+  );
+
+  const displayShift = selectedOpenShift || closedShift;
+  const isOpen = Boolean(selectedOpenShift);
+
+  const availableOperators = useMemo(
+    () => operators.filter((operator) => (
+      !openShifts.some((shift) => String(shift.id_usuario) === String(operator.id_usuario))
+    )),
+    [openShifts, operators],
+  );
+
+  const operatorOptions = useMemo(
+    () => availableOperators.map((operator) => ({
+      value: String(operator.id_usuario),
+      label: operator.nombre,
+      description: operator.username || operator.rol.replaceAll('_', ' '),
+    })),
+    [availableOperators],
+  );
+
+  useEffect(() => {
+    if (!isGlobalAdmin) return;
+    setOpenOperatorId((current) => (
+      availableOperators.some((operator) => String(operator.id_usuario) === current)
+        ? current
+        : String(availableOperators[0]?.id_usuario || '')
+    ));
+  }, [availableOperators, isGlobalAdmin]);
+
+  const selectedBranchName = branches.find((branch) => String(branch.id_sucursal) === branchId)?.nombre;
+
+  const baseAmount = displayShift ? Number(displayShift.monto_inicial || 0) : 0;
+  const rentalIncome = displayShift ? Number(displayShift.ingresos_alquiler || 0) : 0;
+  const posIncome = displayShift ? Number(displayShift.ingresos_pos || 0) : 0;
+  const expectedTotal = displayShift
+    ? Number(displayShift.total_calculado ?? (baseAmount + rentalIncome + posIncome))
+    : 0;
+
+  const declaredText = isOpen
+    ? declared
+    : displayShift?.monto_declarado != null
+      ? String(displayShift.monto_declarado)
+      : '';
+  const hasDeclared = declaredText.trim() !== '' && Number.isFinite(Number(declaredText));
+  const declaredValue = hasDeclared ? Number(declaredText) : 0;
+  const difference = hasDeclared ? Number((declaredValue - expectedTotal).toFixed(2)) : 0;
+  const isExact = hasDeclared && Math.abs(difference) < 0.01;
+
+  const resultAmount = !hasDeclared
+    ? 'Bs. 0.00'
+    : isExact
+      ? 'Bs. 0.00'
+      : `${difference > 0 ? '+' : '-'}Bs. ${Math.abs(difference).toFixed(2)}`;
+  const resultLabel = !hasDeclared
+    ? (isOpen ? 'Ingresa el efectivo contado para calcular' : 'El turno no registra efectivo declarado')
+    : isExact
+      ? '✓ Caja Cuadrada Exacta'
+      : difference > 0
+        ? 'Sobrante en caja'
+        : '⚠ Faltante en caja';
+  const resultTone = !hasDeclared
+    ? styles.resultMuted
+    : isExact
+      ? styles.resultSuccess
+      : difference > 0
+        ? styles.resultInfo
+        : styles.resultDanger;
+
+  const statusLabel = isOpen ? 'Caja Abierta' : displayShift ? 'Turno Cerrado y Auditado' : 'Caja Cerrada';
+  const shiftLabel = displayShift
+    ? `Turno #${displayShift.id_caja} · ${displayShift.nombre_usuario || `Operador ${displayShift.id_usuario}`}`
+    : null;
+
+  const openShift = async () => {
+    if (!branchId) {
+      setNotice({ kind: 'error', text: 'Selecciona una sucursal antes de abrir un turno.' });
+      return;
+    }
+
+    const amount = Number(openAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setNotice({ kind: 'error', text: 'La base inicial debe ser un número mayor o igual a cero.' });
+      return;
+    }
+
+    let operator = Number(user.id_usuario);
+    if (isGlobalAdmin) {
+      const selectedOperator = availableOperators.find((item) => String(item.id_usuario) === openOperatorId);
+      if (!selectedOperator) {
+        setNotice({ kind: 'error', text: 'Selecciona un operador disponible para abrir el turno.' });
+        return;
+      }
+      operator = Number(selectedOperator.id_usuario);
+    }
+
+    setBusy('open');
+    setNotice(null);
+    try {
+      const shift = await openCashShift({
+        id_sucursal: Number(branchId),
+        id_usuario: operator,
+        monto_inicial: amount,
+      });
+      setLastClosedId('');
+      setSelectedShiftId(String(shift.id_caja));
+      setDeclared('');
+      setNotice({ kind: 'success', text: `Turno #${shift.id_caja} abierto con una base de Bs. ${amount.toFixed(2)}.` });
+      await loadShiftData(branchId);
+    } catch (openError) {
+      setNotice({ kind: 'error', text: getErrorMessage(openError) });
+    } finally {
+      setBusy(null);
+    }
   };
 
-  const refresh = () => setArqueo(null); // Force recalculation
+  const executeClose = async () => {
+    if (!selectedOpenShift) return;
+    if (!hasDeclared) {
+      setNotice({ kind: 'error', text: 'Ingresa el efectivo físico contado antes de cerrar el turno.' });
+      return;
+    }
+
+    setBusy('close');
+    setNotice(null);
+    try {
+      const closed = await closeCashShift(selectedOpenShift.id_caja, {
+        monto_declarado: Number(declaredText),
+      });
+      setLastClosedId(String(closed.id_caja));
+      setSelectedShiftId('');
+      setDeclared('');
+      setNotice({ kind: 'success', text: 'Arqueo y cierre de turno registrado correctamente.' });
+      await loadShiftData(branchId);
+    } catch (closeError) {
+      setNotice({ kind: 'error', text: getErrorMessage(closeError) });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={[styles.content, compact && styles.contentCompact]}>
-        <View style={styles.header}>
-          <View style={styles.heading}>
-            <Text style={styles.eyebrow}>ADMINISTRACIÓN · ARQUEO</Text>
-            <Text style={styles.title}>Reporte de Caja</Text>
-            <Text style={styles.subtitle}>Conciliación de efectivo inicial, ventas y declarado</Text>
-          </View>
+        <View style={styles.toolbar}>
+          <BranchPicker branches={branches} selectedBranchId={branchId} onSelect={setBranchId} />
           <Pressable
-            accessibilityRole="button"
             accessibilityLabel="Actualizar arqueo"
+            accessibilityRole="button"
             disabled={loading}
-            onPress={() => setArqueo(null)}
+            onPress={() => { void loadShiftData(branchId); }}
             style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed, loading && styles.disabled]}
           >
-            <X color={colors.accent} size={17} /> Actualizar
+            <RefreshCw color={colors.accent} size={15} />
+            <Text style={styles.refreshText}>Actualizar</Text>
           </Pressable>
         </View>
 
-        {loading ? (
-          <View style={styles.status}>
-            <ActivityIndicator color={colors.accent} />
-            <Text style={styles.statusText}>Cargando arqueo…</Text>
+        {branchLoading ? <StatusCard title="Cargando sucursales…" /> : null}
+        {branchError ? <StatusCard title={branchError} tone="error" /> : null}
+        {notice ? (
+          <View style={[styles.notice, notice.kind === 'success' ? styles.noticeSuccess : styles.noticeError]}>
+            <Text style={styles.noticeText}>{notice.text}</Text>
           </View>
-        ) : error ? (
-          <View style={styles.status}>
-            <Text style={styles.errorTitle}>No se pudo cargar el arqueo</Text>
-            <Text style={styles.statusText}>{error}</Text>
-            <Pressable accessibilityRole="button" onPress={() => setArqueo(null)} style={styles.retryButton}>
-              <Text style={styles.retryText}>Reintentar</Text>
-            </Pressable>
-          </View>
-        ) : !arqueo ? (
-          <View style={styles.status}>
-            <Text style={styles.statusText}>Selecciona una sucursal y período para calcular el arqueo.</Text>
-          </View>
-        ) : (
-          <View style={styles.listCard}>
-            <View style={styles.listHeader}>
-              <View>
-                <Text style={styles.listTitle}>Arqueo de Caja</Text>
-                <Text style={styles.listSubtitle}>Período: {period}</Text>
-              </View>
-              <Text style={styles.count}>Sucursal: {branchScope === 'all' ? 'Todas' : branchScope}</Text>
-            </View>
+        ) : null}
 
-            <View style={styles.arqueoCard}>
-              <View style={styles.arqueoRow}>
-                <Text style={styles.arqueoLabel}>Caja Inicial</Text>
-                <Text style={styles.arqueoValue}>Bs. {Number(arqueo?.initialCash || 0).toFixed(2)}</Text>
-              </View>
-              <View style={styles.arqueoRow}>
-                <Text style={styles.arqueoLabel}>Ventas del Período</Text>
-                <Text style={styles.arqueoValue}>Bs. {Number(arqueo?.totalSales || 0).toFixed(2)}</Text>
-              </View>
-              <View style={styles.arqueoRow}>
-                <Text style={styles.arqueoLabel}>Total Esperado</Text>
-                <Text style={styles.arqueoValue}>Bs. {Number(arqueo?.expectedCash || 0).toFixed(2)}</Text>
-              </View>
-              <View style={styles.arqueoRow}>
-                <Text style={styles.arqueoLabel}>Efectivo Declarado</Text>
-                <Text style={styles.arqueoValue}>Bs. {Number(arqueo?.declaredCash || 0).toFixed(2)}</Text>
-              </View>
-              <View style={styles.arqueoRowDifference}>
-                <Text style={styles.arqueoLabelDifference}>Diferencia</Text>
-                <Text style={styles.arqueoValueDifference}>Bs. {arqueo?.difference >= 0 ? '+' : ''}${arqueo?.difference?.toFixed(2) || '0,00'}</Text>
-              </View>
-            </View>
-
-            <View style={styles.arqueoSummary}>
-              <Text style={styles.arqueoSummaryTitle}>Resultado</Text>
-              <Text style={[styles.arqueoSummaryValue, arqueo?.overShort === 'zero' && styles.arqueoSummarySuccess], arqueo?.overShort}>
-                {arqueo?.overShort === 'zero' ? 'Arqueo exacto - No hay diferencias' : 
-                 arqueo?.overShort === 'plus' ? 'Sobrante menor' : 
-                 arqueo?.overShort === 'minus' ? 'Falta menor' : 
-                 arqueo?.overShort === 'superplus' ? 'Sobresaliente' : 'Falta mayor'}
+        <View style={styles.cajaCard}>
+          <View style={[styles.cajaHeader, compact && styles.cajaHeaderCompact]}>
+            <View style={styles.heading}>
+              <Text style={styles.eyebrow}>
+                {isOpen ? 'Turno Operativo Abierto' : displayShift ? 'Turno Cerrado y Auditado' : 'Sin Turno Abierto'}
               </Text>
+              <Text style={styles.title}>Arqueo y Cierre de Caja</Text>
+              <Text style={styles.branchLabel}>{selectedBranchName || 'Sucursal sin seleccionar'}</Text>
+            </View>
+            <View style={styles.statusBox}>
+              <Text style={styles.statusLabel}>Estado:</Text>
+              <Text style={[styles.statusValue, !isOpen && styles.statusValueClosed]}>{statusLabel}</Text>
             </View>
           </View>
-        )}
 
-        <View style={styles.actions}>
-          {arqueo && (
-            <Pressable accessibilityRole="button" onPress={handlePrint} style={styles.printButton}>
-              <ReceiptText color="#04130d" size={16} /> Imprimir reporte
-            </Pressable>
+          {openShifts.length > 1 ? (
+            <View style={styles.shiftPickerRow}>
+              <Text style={styles.shiftPickerLabel}>Turnos abiertos:</Text>
+              {openShifts.map((shift) => {
+                const active = String(shift.id_caja) === String(selectedOpenShift?.id_caja);
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                    key={String(shift.id_caja)}
+                    onPress={() => {
+                      setSelectedShiftId(String(shift.id_caja));
+                      setDeclared('');
+                    }}
+                    style={[styles.shiftChip, active && styles.shiftChipActive]}
+                  >
+                    <Text style={[styles.shiftChipText, active && styles.shiftChipTextActive]}>
+                      #{shift.id_caja} · {shift.nombre_usuario || `Operador ${shift.id_usuario}`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : shiftLabel ? (
+            <Text style={styles.shiftHint}>{shiftLabel}</Text>
+          ) : null}
+
+          {loading ? (
+            <View style={styles.status}>
+              <ActivityIndicator color={colors.accent} />
+              <Text style={styles.statusText}>Cargando arqueo…</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.status}>
+              <Text style={styles.errorTitle}>No se pudo cargar el arqueo</Text>
+              <Text style={styles.statusText}>{error}</Text>
+              <Pressable accessibilityRole="button" onPress={() => { void loadShiftData(branchId); }} style={styles.retryButton}>
+                <Text style={styles.retryText}>Reintentar</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <View style={styles.breakdownGrid}>
+                <MetricCard label="Monto Apertura (Base Inicial)" tone="neutral" value={`Bs. ${baseAmount.toFixed(2)}`} />
+                <MetricCard label="Ingresos por Alquiler de Mesas" tone="warning" value={`Bs. ${rentalIncome.toFixed(2)}`} />
+                <MetricCard label="Ingresos por Ventas POS" tone="info" value={`Bs. ${posIncome.toFixed(2)}`} />
+                <MetricCard
+                  accent
+                  label="TOTAL ESPERADO EN CAJA"
+                  tone="accent"
+                  value={`Bs. ${expectedTotal.toFixed(2)}`}
+                />
+              </View>
+
+              {displayShift ? (
+                <View style={styles.declarationCard}>
+                  <View style={styles.declarationRow}>
+                    <View style={styles.declaredColumn}>
+                      <Text style={styles.inputLabel}>Efectivo Físico Declarado (Bs.)</Text>
+                      {isOpen ? (
+                        <TextInput
+                          accessibilityLabel="Efectivo físico declarado"
+                          keyboardType="decimal-pad"
+                          onChangeText={setDeclared}
+                          placeholder="Ingrese monto contado en caja..."
+                          placeholderTextColor={colors.textMuted}
+                          style={styles.declaredInput}
+                          value={declared}
+                        />
+                      ) : (
+                        <View style={styles.declaredClosedBox}>
+                          <Text style={styles.declaredClosedValue}>
+                            Bs. {hasDeclared ? declaredValue.toFixed(2) : '0.00'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+
+                    <View style={styles.resultCard}>
+                      <Text style={styles.resultCaption}>Resultado del Cuadre</Text>
+                      <Text style={[styles.resultAmount, resultTone]}>{resultAmount}</Text>
+                      <Text style={[styles.resultHint, resultTone]}>{resultLabel}</Text>
+                    </View>
+                  </View>
+
+                  {isOpen ? (
+                    <View style={styles.actionRow}>
+                      <Pressable
+                        accessibilityRole="button"
+                        disabled={busy !== null || !hasDeclared}
+                        onPress={executeClose}
+                        style={({ pressed }) => [
+                          styles.closeButton,
+                          pressed && styles.pressed,
+                          (busy !== null || !hasDeclared) && styles.disabled,
+                        ]}
+                      >
+                        {busy === 'close'
+                          ? <ActivityIndicator color="#04130d" size="small" />
+                          : (
+                            <>
+                              <Lock color="#04130d" size={16} />
+                              <Text style={styles.closeButtonText}>Ejecutar Cierre de Turno</Text>
+                            </>
+                          )}
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              ) : (
+                <View style={styles.emptyShift}>
+                  <Banknote color={colors.textMuted} size={28} />
+                  <Text style={styles.emptyShiftText}>
+                    No hay un turno de caja abierto. Registra la base inicial para comenzar el arqueo.
+                  </Text>
+                </View>
+              )}
+            </>
           )}
-          <Pressable accessibilityRole="button" onPress={() => setArqueo(null)} style={styles.secondaryButton}>
-            <Text style={styles.secondaryText}>Cerrar</Text>
-          </Pressable>
         </View>
+
+        {!isOpen && !loading ? (
+          <View style={styles.openCard}>
+            <View style={styles.openHeader}>
+              <View style={styles.openHeaderCopy}>
+                <Text style={styles.openTitle}>Abrir Turno de Caja</Text>
+                <Text style={styles.openSubtitle}>
+                  Registra el monto inicial del turno para habilitar el control de efectivo.
+                </Text>
+              </View>
+            </View>
+
+            <View style={[styles.openFields, compact && styles.openFieldsCompact]}>
+              {isGlobalAdmin ? (
+                <View style={styles.openField}>
+                  <Text style={styles.inputLabel}>Operador</Text>
+                  <OptionPicker
+                    disabled={!operatorOptions.length}
+                    label="Operador del turno"
+                    onSelect={setOpenOperatorId}
+                    options={operatorOptions}
+                    placeholder={operatorOptions.length ? 'Seleccionar operador' : 'Sin operadores disponibles'}
+                    value={openOperatorId}
+                  />
+                </View>
+              ) : null}
+
+              <View style={styles.openField}>
+                <Text style={styles.inputLabel}>Monto Inicial / Base (Bs.)</Text>
+                <TextInput
+                  accessibilityLabel="Monto inicial del turno"
+                  keyboardType="decimal-pad"
+                  onChangeText={setOpenAmount}
+                  placeholder="200"
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.declaredInput}
+                  value={openAmount}
+                />
+              </View>
+            </View>
+
+            {isGlobalAdmin && !operatorOptions.length ? (
+              <Text style={styles.openWarning}>
+                Todos los operadores de la sucursal ya tienen un turno abierto.
+              </Text>
+            ) : null}
+
+            <Pressable
+              accessibilityRole="button"
+              disabled={busy !== null || !branchId || (isGlobalAdmin && !operatorOptions.length)}
+              onPress={openShift}
+              style={({ pressed }) => [
+                styles.openButton,
+                pressed && styles.pressed,
+                (busy !== null || !branchId || (isGlobalAdmin && !operatorOptions.length)) && styles.disabled,
+              ]}
+            >
+              {busy === 'open'
+                ? <ActivityIndicator color="#04130d" size="small" />
+                : <Text style={styles.openButtonText}>Abrir Turno</Text>}
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function getErrorMessage(error: unknown) {
-  if (error instanceof ApiError || error instanceof Error) return error.message;
-  return 'Ocurrió un error inesperado.';
+function MetricCard({
+  label,
+  value,
+  tone,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  tone: 'neutral' | 'warning' | 'info' | 'accent';
+  accent?: boolean;
+}) {
+  return (
+    <View style={[styles.metricCard, accent && styles.metricCardAccent]}>
+      <Text style={[styles.metricLabel, accent && styles.metricLabelAccent]}>{label}</Text>
+      <Text style={[
+        styles.metricValue,
+        tone === 'warning' && styles.metricWarning,
+        tone === 'info' && styles.metricInfo,
+        tone === 'accent' && styles.metricAccent,
+      ]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function StatusCard({ title, tone = 'info' }: { title: string; tone?: 'info' | 'error' }) {
+  return (
+    <View style={[styles.statusCard, tone === 'error' && styles.statusCardError]}>
+      <Text style={[styles.statusCardText, tone === 'error' && styles.statusCardTextError]}>{title}</Text>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 24, gap: 18, width: '100%', maxWidth: 1400, alignSelf: 'center' },
+  content: { padding: 20, gap: 16, width: '100%', maxWidth: 900, alignSelf: 'center' },
   contentCompact: { padding: 14, gap: 14 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-  heading: { flex: 1, minWidth: 0 },
-  eyebrow: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 5 },
-  title: { color: colors.text, fontSize: 24, fontWeight: '900' },
-  subtitle: { color: colors.textMuted, fontSize: 12, marginTop: 5, lineHeight: 18 },
+  toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12 },
   refreshButton: {
-    minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    paddingHorizontal: 13, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 13,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
   },
   refreshText: { color: colors.text, fontSize: 12, fontWeight: '700' },
-  pressed: { opacity: 0.78 },
-  status: { alignItems: 'center', justifyContent: 'center', minHeight: 150, padding: 18, gap: 10, borderTopWidth: 1, borderColor: colors.border },
+  pressed: { opacity: 0.8 },
+  disabled: { opacity: 0.55 },
+  notice: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1 },
+  noticeSuccess: { backgroundColor: 'rgba(16, 185, 129, 0.12)', borderColor: 'rgba(16, 185, 129, 0.35)' },
+  noticeError: { backgroundColor: 'rgba(251, 113, 133, 0.12)', borderColor: 'rgba(251, 113, 133, 0.35)' },
+  noticeText: { color: colors.text, fontWeight: '700' },
+  cajaCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    padding: 22,
+    ...shadows,
+  },
+  cajaHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    paddingBottom: 18,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  cajaHeaderCompact: { flexDirection: 'column', alignItems: 'flex-start' },
+  heading: { flex: 1, minWidth: 0 },
+  eyebrow: { color: colors.accent, fontSize: 11, fontWeight: '800', letterSpacing: 1.1, textTransform: 'uppercase' },
+  title: { color: colors.text, fontSize: 24, fontWeight: '800', marginTop: 3 },
+  branchLabel: { color: colors.textMuted, fontSize: 12, marginTop: 4 },
+  statusBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  statusLabel: { color: colors.textMuted, fontSize: 11 },
+  statusValue: { color: colors.accent, fontSize: 11, fontWeight: '800' },
+  statusValueClosed: { color: colors.warning },
+  shiftHint: { color: colors.textMuted, fontSize: 11, fontWeight: '600', marginTop: 12 },
+  shiftPickerRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 14 },
+  shiftPickerLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+  shiftChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  shiftChipActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+  shiftChipText: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+  shiftChipTextActive: { color: colors.accent },
+  status: { alignItems: 'center', justifyContent: 'center', minHeight: 160, padding: 18, gap: 10 },
   errorTitle: { color: colors.danger, fontSize: 14, fontWeight: '800' },
   statusText: { color: colors.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
-  listCard: { padding: 18, borderRadius: 15, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 },
-  listTitle: { color: colors.text, fontSize: 16, fontWeight: '900' },
-  listSubtitle: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
-  count: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
-  arqueoCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 20, ...shadows },
-  arqueoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
- arqueoLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
- arqueoValue: { color: colors.text, fontSize: 20, fontWeight: '800' },
- arqueoRowDifference: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderColor: colors.border },
- arqueoLabelDifference: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
- arqueoValueDifference: { color: colors.warning, fontSize: 20, fontWeight: '800' },  // This has a typo - should be colors.warning
- arqueoSummary: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderRadius: 12, backgroundColor: colors.surfaceRaised, marginTop: 12 },
- arqueoSummaryTitle: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
- arqueoSummaryValue: { color: colors.text, fontSize: 14, fontWeight: '700' },
- arqueoSummarySuccess: { color: colors.accent, fontSize: 12, fontWeight: '600' },
-  printButton: { minHeight: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingHorizontal: 14, borderRadius: 9, backgroundColor: colors.accent },
-  secondaryButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 9, borderWidth: 1, borderColor: colors.border },
-  secondaryText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  retryButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 9, borderWidth: 1, borderColor: colors.accent },
+  retryText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
+  breakdownGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginVertical: 20 },
+  metricCard: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    minWidth: 220,
+    padding: 16,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  metricCardAccent: { backgroundColor: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.45)' },
+  metricLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
+  metricLabelAccent: { color: '#6ee7b7', fontWeight: '800', textTransform: 'uppercase' },
+  metricValue: { color: colors.text, fontSize: 21, fontWeight: '800', marginTop: 5 },
+  metricWarning: { color: colors.warning },
+  metricInfo: { color: colors.info },
+  metricAccent: { color: colors.accent, fontSize: 24 },
+  declarationCard: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 18,
+    gap: 14,
+  },
+  declarationRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 14 },
+  declaredColumn: { flex: 1, minWidth: 240 },
+  inputLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  declaredInput: {
+    minHeight: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    color: colors.text,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  declaredClosedBox: {
+    minHeight: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    justifyContent: 'center',
+    paddingHorizontal: 15,
+  },
+  declaredClosedValue: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  resultCard: {
+    flex: 1,
+    minWidth: 240,
+    padding: 15,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  resultCaption: { color: colors.textMuted, fontSize: 11 },
+  resultAmount: { fontSize: 21, fontWeight: '800', marginTop: 5 },
+  resultHint: { fontSize: 11, fontWeight: '600', marginTop: 3 },
+  resultMuted: { color: colors.textMuted },
+  resultSuccess: { color: colors.accent },
+  resultInfo: { color: colors.info },
+  resultDanger: { color: colors.danger },
+  actionRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingTop: 2 },
+  closeButton: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    backgroundColor: colors.warning,
+  },
+  closeButtonText: { color: '#04130d', fontSize: 13, fontWeight: '800' },
+  emptyShift: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 26,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: 14,
+  },
+  emptyShiftText: { color: colors.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  openCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    padding: 22,
+    ...shadows,
+  },
+  openHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  openHeaderCopy: { flex: 1, minWidth: 0 },
+  openTitle: { color: colors.text, fontSize: 17, fontWeight: '800' },
+  openSubtitle: { color: colors.textMuted, fontSize: 12, marginTop: 4, lineHeight: 17 },
+  openFields: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 16 },
+  openFieldsCompact: { flexDirection: 'column' },
+  openField: { flex: 1, minWidth: 220 },
+  openWarning: { color: colors.warning, fontSize: 11, fontWeight: '700', marginTop: 12 },
+  openButton: {
+    alignSelf: 'flex-end',
+    minHeight: 44,
+    minWidth: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    borderRadius: 11,
+    backgroundColor: colors.accent,
+    marginTop: 16,
+  },
+  openButtonText: { color: '#04130d', fontSize: 13, fontWeight: '800' },
+  statusCard: {
+    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+  },
+  statusCardError: { backgroundColor: 'rgba(251, 113, 133, 0.08)', borderColor: 'rgba(251, 113, 133, 0.3)' },
+  statusCardText: { color: colors.text, fontWeight: '700' },
+  statusCardTextError: { color: colors.danger },
 });

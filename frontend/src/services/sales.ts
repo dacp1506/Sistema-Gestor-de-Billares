@@ -23,6 +23,12 @@ export type Sale = {
   id_usuario: number | string;
   nombre_sucursal?: string;
   nombre_usuario?: string;
+  numero_mesa?: string | null;
+  minutos_totales?: number | null;
+  total_tiempo?: number | null;
+  tarifa_minuto?: number | null;
+  sesion_hora_inicio?: string | null;
+  sesion_hora_fin?: string | null;
   detalles?: Array<{
     id_detalle: number;
     id_producto: number;

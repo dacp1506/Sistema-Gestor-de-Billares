@@ -11,57 +11,91 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Lock, Plus, RefreshCw, Trash2, Wrench } from 'lucide-react-native';
 import { BranchPicker } from '../components/BranchPicker';
+import { OptionPicker } from '../components/OptionPicker';
 import { useAccessibleModal } from '../hooks/useAccessibleModal';
 import { ApiError } from '../services/api';
 import type { AuthUser } from '../services/auth';
+import { listBranches } from '../services/products';
+import type { Branch } from '../services/products';
 import {
-  createSession,
   createTable,
-  finishSession,
-  listActiveSessions,
-  listBranches,
-  listSessions,
+  deactivateTable,
   listTables,
-  pauseSession,
-  resumeSession,
+  updateTable,
   type Table,
   type TableInput,
-  type TableSession,
 } from '../services/tables';
 import { colors, shadows } from '../theme';
 
 type Notice = { kind: 'success' | 'error'; text: string } | null;
 
-const defaultTableForm = {
-  numero_mesa: '',
-  tipo_mesa: 'Pool',
-  tarifa_minuto: '30',
-  estado: 'libre' as 'libre' | 'mantenimiento',
+type TableForm = {
+  numero_mesa: string;
+  tipo_mesa: string;
+  tarifa_minuto: string;
 };
+
+const TABLE_TYPES = [
+  'Pool Profesional',
+  'Pool Estándar',
+  'Carambola 3 Bandas',
+  'Snooker',
+  'Sala VIP Privada',
+];
+
+const defaultForm = (): TableForm => ({
+  numero_mesa: '',
+  tipo_mesa: TABLE_TYPES[0],
+  tarifa_minuto: '0.60',
+});
+
+const roleLabel: Record<AuthUser['rol'], string> = {
+  admin_general: 'Admin General',
+  admin_sucursal: 'Admin Sucursal',
+  cajero: 'Cajero / Operador',
+};
+
+function money(value: number) {
+  return `Bs. ${Number(value || 0).toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError || error instanceof Error) return error.message;
+  return 'Ocurrió un error inesperado en la operación.';
+}
 
 export default function TablesScreen({ user }: { user: AuthUser }) {
   const { width } = useWindowDimensions();
-  const compact = width < 720;
+  const compact = width < 900;
   const canManageTables = user.rol !== 'cajero';
-  const [branches, setBranches] = useState<Array<{ id_sucursal: number | string; nombre: string; estado: boolean }>>([]);
+
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState('');
   const [tables, setTables] = useState<Table[]>([]);
-  const [sessions, setSessions] = useState<TableSession[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [branchesLoading, setBranchesLoading] = useState(true);
   const [branchError, setBranchError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+
+  const [rateDrafts, setRateDrafts] = useState<Record<string, string>>({});
+  const [savingRateId, setSavingRateId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
   const [formVisible, setFormVisible] = useState(false);
   useAccessibleModal(formVisible, () => setFormVisible(false));
+  const [form, setForm] = useState<TableForm>(defaultForm);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [sessioningTableId, setSessioningTableId] = useState<number | string | null>(null);
-  const [sessionActionId, setSessionActionId] = useState<number | string | null>(null);
-  const [tableForm, setTableForm] = useState(defaultTableForm);
 
-  const fetchBranches = useCallback(async () => {
+  const [tableToDeactivate, setTableToDeactivate] = useState<Table | null>(null);
+  useAccessibleModal(Boolean(tableToDeactivate), () => setTableToDeactivate(null));
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const loadBranches = useCallback(async () => {
     setBranchesLoading(true);
     setBranchError(null);
     try {
@@ -81,10 +115,9 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
     }
   }, []);
 
-  const fetchTables = useCallback(async (selectedBranchId: string) => {
+  const loadTables = useCallback(async (selectedBranchId: string) => {
     if (!selectedBranchId) {
       setTables([]);
-      setSessions([]);
       setListError(null);
       setLoading(false);
       return;
@@ -93,51 +126,123 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
     setLoading(true);
     setListError(null);
     try {
-      const [tableList, sessionList] = await Promise.all([
-        listTables(selectedBranchId),
-        listActiveSessions(selectedBranchId),
-      ]);
-      setTables(tableList);
-      setSessions(sessionList);
+      setTables(await listTables(selectedBranchId));
     } catch (error) {
       setTables([]);
-      setSessions([]);
       setListError(getErrorMessage(error));
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    void fetchBranches();
-  }, [fetchBranches]);
+  useEffect(() => { void loadBranches(); }, [loadBranches]);
+  useEffect(() => { void loadTables(branchId); }, [branchId, loadTables]);
 
   useEffect(() => {
-    void fetchTables(branchId);
-  }, [branchId, fetchTables]);
+    setRateDrafts(Object.fromEntries(
+      tables.map((table) => [String(table.id_mesa), Number(table.tarifa_minuto).toFixed(2)]),
+    ));
+  }, [tables]);
 
-  const summary = useMemo(() => {
-    const active = sessions.filter((session) => session.estado === 'activa' || session.estado === 'pausada').length;
-    return {
-      libres: tables.filter((table) => table.estado === 'libre').length,
-      ocupadas: tables.filter((table) => table.estado === 'ocupada').length,
-      activas: active,
-    };
-  }, [sessions, tables]);
-
-  const openCreateTable = () => {
+  useEffect(() => {
+    setNotice(null);
     setFormError(null);
-    setTableForm({ ...defaultTableForm });
+  }, [branchId]);
+
+  const selectedBranchName = branches.find((branch) => String(branch.id_sucursal) === branchId)?.nombre;
+  const typeOptions = useMemo(
+    () => TABLE_TYPES.map((type) => ({ value: type, label: type })),
+    [],
+  );
+
+  const openCreateForm = () => {
+    setForm(defaultForm());
+    setFormError(null);
     setFormVisible(true);
   };
 
-  const createTableRecord = async () => {
-    if (!branchId) return;
-    const numero = tableForm.numero_mesa.trim();
-    const tipo = tableForm.tipo_mesa.trim();
-    const tarifa = Number(tableForm.tarifa_minuto);
-    if (!numero || !tipo || !Number.isFinite(tarifa) || tarifa <= 0) {
-      setFormError('Ingresa número, tipo y tarifa válidos para la mesa.');
+  const saveRate = async (table: Table, rawValue: string) => {
+    const key = String(table.id_mesa);
+    const previous = Number(table.tarifa_minuto).toFixed(2);
+    const value = Number(String(rawValue).replace(',', '.'));
+
+    if (!Number.isFinite(value) || value <= 0) {
+      setRateDrafts((current) => ({ ...current, [key]: previous }));
+      setNotice({ kind: 'error', text: 'La tarifa por minuto debe ser mayor a Bs. 0,00.' });
+      return;
+    }
+    if (Math.abs(value - Number(table.tarifa_minuto)) < 0.005) {
+      setRateDrafts((current) => ({ ...current, [key]: value.toFixed(2) }));
+      return;
+    }
+
+    setSavingRateId(key);
+    setNotice(null);
+    try {
+      const payload: TableInput = {
+        numero_mesa: table.numero_mesa,
+        tipo_mesa: table.tipo_mesa,
+        tarifa_minuto: Number(value.toFixed(2)),
+        id_sucursal: Number(table.id_sucursal),
+        estado: table.estado === 'mantenimiento' ? 'mantenimiento' : 'libre',
+      };
+      await updateTable(table.id_mesa, payload);
+      setNotice({
+        kind: 'success',
+        text: `Tarifa de la mesa ${table.numero_mesa} actualizada a ${money(payload.tarifa_minuto)}/min.`,
+      });
+      await loadTables(branchId);
+    } catch (error) {
+      setRateDrafts((current) => ({ ...current, [key]: previous }));
+      setNotice({ kind: 'error', text: getErrorMessage(error) });
+    } finally {
+      setSavingRateId(null);
+    }
+  };
+
+  const toggleMaintenance = async (table: Table) => {
+    const key = String(table.id_mesa);
+    const nextState = table.estado === 'mantenimiento' ? 'libre' : 'mantenimiento';
+    setTogglingId(key);
+    setNotice(null);
+    try {
+      await updateTable(table.id_mesa, {
+        numero_mesa: table.numero_mesa,
+        tipo_mesa: table.tipo_mesa,
+        tarifa_minuto: Number(table.tarifa_minuto),
+        id_sucursal: Number(table.id_sucursal),
+        estado: nextState,
+      });
+      setNotice({
+        kind: 'success',
+        text: `Mesa ${table.numero_mesa} ahora está en ${nextState === 'libre' ? 'LIBRE' : 'MANTENIMIENTO'}.`,
+      });
+      await loadTables(branchId);
+    } catch (error) {
+      setNotice({ kind: 'error', text: getErrorMessage(error) });
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const submitTable = async () => {
+    if (!branchId) {
+      setFormError('Selecciona una sucursal antes de registrar la mesa.');
+      return;
+    }
+    const numero = form.numero_mesa.trim();
+    const tipo = form.tipo_mesa.trim();
+    const tarifa = Number(form.tarifa_minuto.replace(',', '.'));
+    if (!numero) {
+      setFormError('El nombre o número de mesa es obligatorio.');
+      return;
+    }
+    if (!tipo) {
+      setFormError('Selecciona el tipo o modalidad de la mesa.');
+      return;
+    }
+    if (!Number.isFinite(tarifa) || tarifa <= 0) {
+      setFormError('La tarifa por minuto debe ser un número mayor a cero.');
       return;
     }
 
@@ -147,13 +252,13 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
       await createTable({
         numero_mesa: numero,
         tipo_mesa: tipo,
-        tarifa_minuto: tarifa,
+        tarifa_minuto: Number(tarifa.toFixed(2)),
         id_sucursal: Number(branchId),
-        estado: tableForm.estado,
+        estado: 'libre',
       });
-      setNotice({ kind: 'success', text: 'Mesa registrada correctamente.' });
       setFormVisible(false);
-      await fetchTables(branchId);
+      setNotice({ kind: 'success', text: `Mesa "${numero}" creada con tarifa ${money(tarifa)}/min.` });
+      await loadTables(branchId);
     } catch (error) {
       setFormError(getErrorMessage(error));
     } finally {
@@ -161,272 +266,316 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
     }
   };
 
-  const startSessionForTable = async (table: Table) => {
-    const parsedUser = Number(user.id_usuario);
-    if (!Number.isInteger(parsedUser) || parsedUser <= 0) {
-      setNotice({ kind: 'error', text: 'Ingresa un id_usuario válido para iniciar la sesión.' });
-      return;
-    }
-
-    setSessioningTableId(table.id_mesa);
-    setNotice(null);
+  const confirmDeactivate = async () => {
+    if (!tableToDeactivate) return;
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      await createSession({ id_mesa: Number(table.id_mesa), id_usuario: parsedUser });
-      setNotice({ kind: 'success', text: `Sesión iniciada para la mesa ${table.numero_mesa}.` });
-      await fetchTables(branchId);
+      await deactivateTable(tableToDeactivate.id_mesa);
+      const removed = tableToDeactivate;
+      setTableToDeactivate(null);
+      setNotice({ kind: 'success', text: `Mesa ${removed.numero_mesa} desactivada de la sucursal.` });
+      await loadTables(branchId);
     } catch (error) {
-      setNotice({ kind: 'error', text: getErrorMessage(error) });
+      setDeleteError(getErrorMessage(error));
     } finally {
-      setSessioningTableId(null);
+      setDeleting(false);
     }
   };
 
-  const runSessionAction = async (session: TableSession, action: 'pause' | 'resume' | 'finish') => {
-    setSessionActionId(session.id_sesion);
-    setNotice(null);
-    try {
-      if (action === 'pause') {
-        await pauseSession(session.id_sesion);
-        setNotice({ kind: 'success', text: `La sesión de la mesa ${session.numero_mesa} quedó pausada.` });
-      }
-      if (action === 'resume') {
-        await resumeSession(session.id_sesion);
-        setNotice({ kind: 'success', text: `La sesión de la mesa ${session.numero_mesa} se reanudó.` });
-      }
-      if (action === 'finish') {
-        await finishSession(session.id_sesion);
-        setNotice({ kind: 'success', text: `La sesión de la mesa ${session.numero_mesa} finalizó.` });
-      }
-      await fetchTables(branchId);
-    } catch (error) {
-      setNotice({ kind: 'error', text: getErrorMessage(error) });
-    } finally {
-      setSessionActionId(null);
-    }
-  };
+  const isEmpty = !loading && !tables.length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={[styles.content, compact && styles.contentCompact]}>
         <View style={styles.headerCard}>
-          <View style={styles.headerRow}>
-            <View style={styles.titleWrap}>
-              <Text style={styles.eyebrow}>OPERACIÓN · MESAS</Text>
-              <Text style={styles.pageTitle}>Mesas y sesiones</Text>
-              <Text style={styles.subtitle}>Control de mesas por sucursal y gestión de sesiones de juego.</Text>
+          <View style={[styles.headerRow, compact && styles.headerRowCompact]}>
+            <View style={styles.headerCopy}>
+              <Text style={styles.eyebrow}>ADMINISTRACIÓN · MESAS</Text>
+              <Text style={styles.title}>Configuración de Mesas y Tarifas por Minuto</Text>
+              <Text style={styles.subtitle}>
+                Crea mesas nuevas, ajusta individualmente el precio por minuto (Bs.) o elimina mesas inactivas.
+              </Text>
             </View>
             {canManageTables ? (
               <Pressable
                 accessibilityRole="button"
                 disabled={!branchId}
-                onPress={openCreateTable}
-                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, !branchId && styles.disabledButton]}
+                onPress={openCreateForm}
+                style={({ pressed }) => [
+                  styles.createButton,
+                  pressed && styles.pressed,
+                  !branchId && styles.disabled,
+                ]}
               >
-                <Text style={styles.primaryText}>＋ Nueva mesa</Text>
+                <Plus color="#04130d" size={16} strokeWidth={2.6} />
+                <Text style={styles.createText}>Crear Nueva Mesa</Text>
               </Pressable>
             ) : null}
           </View>
 
           <View style={[styles.toolbar, compact && styles.toolbarCompact]}>
             <BranchPicker branches={branches} selectedBranchId={branchId} onSelect={setBranchId} />
-            <View style={styles.userField}>
-              <Text style={styles.label}>OPERADOR</Text>
-              <Text style={styles.input}>{user.nombre}</Text>
-            </View>
+            <Pressable
+              accessibilityLabel="Actualizar mesas"
+              accessibilityRole="button"
+              disabled={loading}
+              onPress={() => { void loadTables(branchId); }}
+              style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed, loading && styles.disabled]}
+            >
+              <RefreshCw color={colors.accent} size={15} />
+              <Text style={styles.refreshText}>Actualizar</Text>
+            </Pressable>
+            {selectedBranchName ? <Text style={styles.branchHint}>{selectedBranchName}</Text> : null}
           </View>
 
-          {branchesLoading ? (
-            <StatusCard title="Cargando sucursales…" />
-          ) : branchError ? (
-            <StatusCard title={branchError} tone="error" />
-          ) : null}
+          {branchesLoading ? <StatusBox text="Cargando sucursales…" /> : null}
+          {branchError ? <StatusBox text={branchError} tone="error" /> : null}
+        </View>
 
-          <View style={styles.summaryGrid}>
-            <MetricCard label="Mesas libres" value={String(summary.libres)} accent />
-            <MetricCard label="Mesas ocupadas" value={String(summary.ocupadas)} />
-            <MetricCard label="Sesiones activas" value={String(summary.activas)} />
+        {!canManageTables ? (
+          <View style={styles.readonlyBanner}>
+            <Lock color={colors.warning} size={16} />
+            <Text style={styles.readonlyText}>
+              Modo lectura: tu rol actual (<Text style={styles.readonlyStrong}>{roleLabel[user.rol]}</Text>) no tiene
+              permisos para crear, eliminar ni editar tarifas de mesas. Cambia a{' '}
+              <Text style={styles.readonlyStrong}>Admin Sucursal</Text> o{' '}
+              <Text style={styles.readonlyStrong}>Admin General</Text> para editar.
+            </Text>
+          </View>
+        ) : null}
+
+        {notice ? (
+          <View style={[styles.notice, notice.kind === 'success' ? styles.noticeSuccess : styles.noticeError]}>
+            <Text style={styles.noticeText}>{notice.text}</Text>
+          </View>
+        ) : null}
+
+        <View style={styles.tablePanel}>
+          <View style={styles.panelHeader}>
+            <Text style={styles.panelTitle}>Mesas de la sucursal</Text>
+            <Text style={styles.panelMeta}>{tables.length} mesa{tables.length === 1 ? '' : 's'} activa{tables.length === 1 ? '' : 's'}</Text>
           </View>
 
-          {notice ? (
-            <View style={[styles.notice, notice.kind === 'success' ? styles.noticeSuccess : styles.noticeError]}>
-              <Text style={styles.noticeText}>{notice.text}</Text>
+          {!compact ? (
+            <View style={styles.headRow}>
+              <Text style={[styles.headCell, styles.colTable]}>Mesa</Text>
+              <Text style={[styles.headCell, styles.colType]}>Categoría / Tipo</Text>
+              <Text style={[styles.headCell, styles.colRate]}>Tarifa por Minuto (Bs.)</Text>
+              <Text style={[styles.headCell, styles.colHour]}>Equivalente Hora</Text>
+              <Text style={[styles.headCell, styles.colStatus]}>Estado Actual</Text>
+              <Text style={[styles.headCell, styles.colActions, styles.headRight]}>Acciones</Text>
             </View>
           ) : null}
 
           {loading ? (
             <View style={styles.loaderWrap}>
-              <ActivityIndicator color={colors.accent} size="large" />
-              <Text style={styles.loaderText}>Cargando mesas y sesiones…</Text>
+              <ActivityIndicator color={colors.accent} />
+              <Text style={styles.loaderText}>Cargando mesas…</Text>
             </View>
           ) : listError ? (
-            <StatusCard title={listError} tone="error" />
-          ) : null}
-        </View>
-
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Mesas</Text>
-            <Text style={styles.sectionMeta}>{tables.length} registradas</Text>
-          </View>
-
-          {!tables.length && !loading ? (
-            <Text style={styles.emptyText}>No hay mesas en esta sucursal aún.</Text>
+            <View style={styles.loaderWrap}>
+              <Text style={styles.errorTitle}>No se pudieron cargar las mesas</Text>
+              <Text style={styles.loaderText}>{listError}</Text>
+              <Pressable accessibilityRole="button" onPress={() => { void loadTables(branchId); }} style={styles.retryButton}>
+                <Text style={styles.retryText}>Reintentar</Text>
+              </Pressable>
+            </View>
+          ) : isEmpty ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>No hay mesas activas en esta sucursal. Crea la primera con “Crear Nueva Mesa”.</Text>
+            </View>
           ) : (
-            tables.map((table) => (
-              <View key={String(table.id_mesa)} style={styles.tableCard}>
-                <View style={styles.tableTopRow}>
-                  <View>
-                    <Text style={styles.tableNumber}>Mesa {table.numero_mesa}</Text>
-                    <Text style={styles.tableMeta}>{table.tipo_mesa} · ${Number(table.tarifa_minuto).toFixed(2)}/min</Text>
-                  </View>
-                  <View style={[styles.badge, table.estado === 'libre' ? styles.badgeFree : table.estado === 'ocupada' ? styles.badgeBusy : styles.badgeMaintenance]}>
-                    <Text style={styles.badgeText}>{statusLabel(table.estado)}</Text>
-                  </View>
-                </View>
+            tables.map((table) => {
+              const key = String(table.id_mesa);
+              const occupied = table.estado === 'ocupada';
+              const editable = canManageTables && !occupied;
+              const draft = rateDrafts[key] ?? Number(table.tarifa_minuto).toFixed(2);
+              const hourly = (Number(draft.replace(',', '.')) || 0) * 60;
 
-                <View style={styles.actionRow}>
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={table.estado !== 'libre' || !branchId || sessioningTableId === table.id_mesa}
-                    onPress={() => startSessionForTable(table)}
-                    style={({ pressed }) => [styles.actionButton, styles.primaryAction, (table.estado !== 'libre' || sessioningTableId === table.id_mesa) && styles.disabledButton, pressed && styles.pressed]}
-                  >
-                    {sessioningTableId === table.id_mesa ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionText}>Abrir sesión</Text>}
-                  </Pressable>
-                  <Text style={styles.tableStateText}>{table.estado === 'libre' ? 'Lista para uso' : 'No disponible para inicio'}</Text>
+              return (
+                <View key={key} style={[styles.row, compact && styles.rowCompact]}>
+                  <View style={[styles.cellBlock, styles.colTable]}>
+                    {compact ? <Text style={styles.cellLabel}>Mesa</Text> : null}
+                    <Text style={styles.tableName}>Mesa {table.numero_mesa}</Text>
+                  </View>
+
+                  <View style={[styles.cellBlock, styles.colType]}>
+                    {compact ? <Text style={styles.cellLabel}>Categoría / Tipo</Text> : null}
+                    <Text style={styles.cellText}>{table.tipo_mesa}</Text>
+                  </View>
+
+                  <View style={[styles.cellBlock, styles.colRate]}>
+                    {compact ? <Text style={styles.cellLabel}>Tarifa por minuto</Text> : null}
+                    <View style={styles.rateWrap}>
+                      <Text style={styles.ratePrefix}>Bs.</Text>
+                      <TextInput
+                        accessibilityLabel={`Tarifa por minuto de la mesa ${table.numero_mesa}`}
+                        editable={editable && savingRateId !== key}
+                        inputMode="decimal"
+                        onBlur={() => { void saveRate(table, draft); }}
+                        onChangeText={(value) => setRateDrafts((current) => ({ ...current, [key]: value }))}
+                        onSubmitEditing={() => { void saveRate(table, draft); }}
+                        selectTextOnFocus
+                        style={[styles.rateInput, !editable && styles.rateInputDisabled]}
+                        value={draft}
+                      />
+                      {savingRateId === key ? <ActivityIndicator color={colors.accent} size="small" /> : null}
+                    </View>
+                  </View>
+
+                  <View style={[styles.cellBlock, styles.colHour]}>
+                    {compact ? <Text style={styles.cellLabel}>Equivalente hora</Text> : null}
+                    <Text style={styles.hourText}>{money(hourly)} / hora</Text>
+                  </View>
+
+                  <View style={[styles.cellBlock, styles.colStatus]}>
+                    {compact ? <Text style={styles.cellLabel}>Estado actual</Text> : null}
+                    <StatusBadge estado={table.estado} />
+                  </View>
+
+                  <View style={[styles.cellBlock, styles.colActions, styles.actionsCell]}>
+                    {canManageTables ? (
+                      <>
+                        <Pressable
+                          accessibilityLabel={`Alternar mantenimiento de la mesa ${table.numero_mesa}`}
+                          accessibilityRole="button"
+                          disabled={occupied || togglingId === key}
+                          onPress={() => { void toggleMaintenance(table); }}
+                          style={({ pressed }) => [
+                            styles.iconButton,
+                            pressed && styles.pressed,
+                            (occupied || togglingId === key) && styles.disabled,
+                          ]}
+                        >
+                          {togglingId === key
+                            ? <ActivityIndicator color={colors.textMuted} size="small" />
+                            : <Wrench color={colors.textMuted} size={15} />}
+                        </Pressable>
+                        <Pressable
+                          accessibilityLabel={`Eliminar la mesa ${table.numero_mesa}`}
+                          accessibilityRole="button"
+                          disabled={occupied}
+                          onPress={() => {
+                            setDeleteError(null);
+                            setTableToDeactivate(table);
+                          }}
+                          style={({ pressed }) => [
+                            styles.iconButton,
+                            styles.dangerButton,
+                            pressed && styles.pressed,
+                            occupied && styles.disabled,
+                          ]}
+                        >
+                          <Trash2 color={colors.danger} size={15} />
+                        </Pressable>
+                      </>
+                    ) : (
+                      <Text style={styles.readonlyCell}>Solo lectura</Text>
+                    )}
+                  </View>
                 </View>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
 
-        <View style={styles.sectionCard}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Sesiones activas</Text>
-            <Text style={styles.sectionMeta}>{sessions.length} abiertas</Text>
-          </View>
-
-          {!sessions.length ? (
-            <Text style={styles.emptyText}>No hay sesiones activas o pausadas en esta sucursal.</Text>
-          ) : (
-            sessions.map((session) => (
-              <View key={String(session.id_sesion)} style={styles.sessionCard}>
-                <View style={styles.sessionHeader}>
-                  <View>
-                    <Text style={styles.sessionTitle}>Mesa {session.numero_mesa}</Text>
-                    <Text style={styles.sessionMeta}>Usuario {session.id_usuario} · ${Number(session.tarifa_minuto).toFixed(2)}/min</Text>
-                  </View>
-                  <View style={[styles.badge, session.estado === 'activa' ? styles.badgeFree : session.estado === 'pausada' ? styles.badgeMaintenance : styles.badgeBusy]}>
-                    <Text style={styles.badgeText}>{sessionStateLabel(session.estado)}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.sessionActions}>
-                  {session.estado === 'activa' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={sessionActionId === session.id_sesion}
-                      onPress={() => runSessionAction(session, 'pause')}
-                      style={({ pressed }) => [styles.actionButton, styles.warningAction, sessionActionId === session.id_sesion && styles.disabledButton, pressed && styles.pressed]}
-                    >
-                      {sessionActionId === session.id_sesion ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionText}>Pausar</Text>}
-                    </Pressable>
-                  ) : null}
-
-                  {session.estado === 'pausada' ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      disabled={sessionActionId === session.id_sesion}
-                      onPress={() => runSessionAction(session, 'resume')}
-                      style={({ pressed }) => [styles.actionButton, styles.successAction, sessionActionId === session.id_sesion && styles.disabledButton, pressed && styles.pressed]}
-                    >
-                      {sessionActionId === session.id_sesion ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionText}>Reanudar</Text>}
-                    </Pressable>
-                  ) : null}
-
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={sessionActionId === session.id_sesion}
-                    onPress={() => runSessionAction(session, 'finish')}
-                    style={({ pressed }) => [styles.actionButton, styles.dangerAction, sessionActionId === session.id_sesion && styles.disabledButton, pressed && styles.pressed]}
-                  >
-                    {sessionActionId === session.id_sesion ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionText}>Finalizar</Text>}
-                  </Pressable>
-                </View>
-              </View>
-            ))
-          )}
-        </View>
+        <Text style={styles.footnote}>
+          Las mesas ocupadas no permiten editar tarifa, cambiar de estado ni desactivarse hasta que la sesión finalice.
+        </Text>
       </ScrollView>
 
-      <Modal animationType="fade" transparent visible={formVisible} onRequestClose={() => setFormVisible(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setFormVisible(false)}>
+      <Modal animationType="fade" onRequestClose={() => setFormVisible(false)} transparent visible={formVisible}>
+        <Pressable style={styles.modalLayer} onPress={() => setFormVisible(false)}>
           <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-            <Text style={styles.modalTitle}>Registrar mesa</Text>
+            <Text style={styles.modalEyebrow}>NUEVA MESA</Text>
+            <Text style={styles.modalTitle}>Crear Nueva Mesa en Sucursal</Text>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Número</Text>
+              <Text style={styles.label}>Nombre o Número de Mesa</Text>
               <TextInput
-                accessibilityLabel="Número de mesa"
-                autoCapitalize="none"
-                onChangeText={(value) => setTableForm((current) => ({ ...current, numero_mesa: value }))}
-                placeholder="Ej. 1"
+                accessibilityLabel="Nombre o número de mesa"
+                onChangeText={(value) => setForm((current) => ({ ...current, numero_mesa: value }))}
+                placeholder="Ej. 7 o Mesa 7 - VIP"
                 placeholderTextColor={colors.textMuted}
                 style={styles.input}
-                value={tableForm.numero_mesa}
+                value={form.numero_mesa}
               />
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Tipo</Text>
-              <TextInput
-                accessibilityLabel="Tipo de mesa"
-                onChangeText={(value) => setTableForm((current) => ({ ...current, tipo_mesa: value }))}
-                placeholder="Pool"
-                placeholderTextColor={colors.textMuted}
-                style={styles.input}
-                value={tableForm.tipo_mesa}
+              <Text style={styles.label}>Tipo / Modalidad</Text>
+              <OptionPicker
+                label="Tipo o modalidad de la mesa"
+                onSelect={(value) => setForm((current) => ({ ...current, tipo_mesa: value }))}
+                options={typeOptions}
+                value={form.tipo_mesa}
               />
             </View>
 
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Tarifa por minuto</Text>
+              <Text style={styles.label}>Tarifa por Minuto (Bs.)</Text>
               <TextInput
                 accessibilityLabel="Tarifa por minuto"
-                keyboardType="decimal-pad"
-                onChangeText={(value) => setTableForm((current) => ({ ...current, tarifa_minuto: value }))}
-                placeholder="30"
+                inputMode="decimal"
+                onChangeText={(value) => setForm((current) => ({ ...current, tarifa_minuto: value }))}
+                placeholder="0.60"
                 placeholderTextColor={colors.textMuted}
                 style={styles.input}
-                value={tableForm.tarifa_minuto}
+                value={form.tarifa_minuto}
               />
-            </View>
-
-            <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Estado inicial</Text>
-              <View style={styles.segmentRow}>
-                {(['libre', 'mantenimiento'] as const).map((option) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: tableForm.estado === option }}
-                    key={option}
-                    onPress={() => setTableForm((current) => ({ ...current, estado: option }))}
-                    style={[styles.segmentOption, tableForm.estado === option && styles.segmentOptionActive]}
-                  >
-                    <Text style={[styles.segmentText, tableForm.estado === option && styles.segmentTextActive]}>{option === 'libre' ? 'Libre' : 'Mantenimiento'}</Text>
-                  </Pressable>
-                ))}
-              </View>
             </View>
 
             {formError ? <Text style={styles.inlineError}>{formError}</Text> : null}
 
             <View style={styles.modalActions}>
-              <Pressable accessibilityRole="button" onPress={() => setFormVisible(false)} style={[styles.actionButton, styles.secondaryAction]}>
-                <Text style={styles.actionText}>Cancelar</Text>
+              <Pressable accessibilityRole="button" onPress={() => setFormVisible(false)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>Cancelar</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" onPress={createTableRecord} style={[styles.actionButton, styles.primaryAction]} disabled={submitting}>
-                {submitting ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.actionText}>Guardar</Text>}
+              <Pressable
+                accessibilityRole="button"
+                disabled={submitting}
+                onPress={submitTable}
+                style={[styles.saveButton, submitting && styles.disabled]}
+              >
+                {submitting
+                  ? <ActivityIndicator color="#04130d" size="small" />
+                  : <Text style={styles.saveText}>Guardar Mesa</Text>}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setTableToDeactivate(null)}
+        transparent
+        visible={Boolean(tableToDeactivate)}
+      >
+        <Pressable style={styles.modalLayer} onPress={() => setTableToDeactivate(null)}>
+          <Pressable style={styles.confirmCard} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.modalEyebrow}>DESACTIVAR MESA</Text>
+            <Text style={styles.modalTitle}>Eliminar mesa {tableToDeactivate?.numero_mesa}</Text>
+            <Text style={styles.confirmMessage}>
+              La mesa dejará de estar disponible para la operación y no aparecerá en las listas de la sucursal.
+            </Text>
+
+            {deleteError ? <Text style={styles.inlineError}>{deleteError}</Text> : null}
+
+            <View style={styles.modalActions}>
+              <Pressable accessibilityRole="button" onPress={() => setTableToDeactivate(null)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={deleting}
+                onPress={confirmDeactivate}
+                style={[styles.deleteButton, deleting && styles.disabled]}
+              >
+                {deleting
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.deleteText}>Eliminar Mesa</Text>}
               </Pressable>
             </View>
           </Pressable>
@@ -436,174 +585,297 @@ export default function TablesScreen({ user }: { user: AuthUser }) {
   );
 }
 
-function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) return error.message;
-  return 'Ocurrió un error inesperado en la operación.';
-}
-
-function statusLabel(value: Table['estado']) {
-  return value === 'libre' ? 'Libre' : value === 'ocupada' ? 'Ocupada' : 'Mantenimiento';
-}
-
-function sessionStateLabel(value: TableSession['estado']) {
-  return value === 'activa' ? 'Activa' : value === 'pausada' ? 'Pausada' : 'Finalizada';
-}
-
-function StatusCard({ title, tone = 'info' }: { title: string; tone?: 'info' | 'error' }) {
+function StatusBadge({ estado }: { estado: Table['estado'] }) {
+  const label = estado === 'libre' ? 'LIBRE' : estado === 'ocupada' ? 'OCUPADA' : 'MANTENIMIENTO';
   return (
-    <View style={[styles.statusCard, tone === 'error' && styles.statusCardError]}>
-      <Text style={[styles.statusText, tone === 'error' && styles.statusTextError]}>{title}</Text>
+    <View style={[
+      styles.badge,
+      estado === 'libre' ? styles.badgeFree : estado === 'ocupada' ? styles.badgeBusy : styles.badgeMaintenance,
+    ]}>
+      <Text style={[
+        styles.badgeText,
+        estado === 'libre' ? styles.badgeTextFree : estado === 'ocupada' ? styles.badgeTextBusy : styles.badgeTextMaintenance,
+      ]}>
+        {label}
+      </Text>
     </View>
   );
 }
 
-function MetricCard({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function StatusBox({ text, tone = 'info' }: { text: string; tone?: 'info' | 'error' }) {
   return (
-    <View style={[styles.metricCard, accent && styles.metricCardAccent]}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
+    <View style={[styles.statusBox, tone === 'error' && styles.statusBoxError]}>
+      <Text style={[styles.statusText, tone === 'error' && styles.statusTextError]}>{text}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 18, gap: 18 },
-  contentCompact: { padding: 12 },
+  content: { padding: 20, gap: 16, width: '100%', maxWidth: 1400, alignSelf: 'center' },
+  contentCompact: { padding: 14, gap: 14 },
+
   headerCard: {
     backgroundColor: colors.surface,
-    borderRadius: 22,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
+    borderRadius: 18,
+    padding: 20,
     ...shadows,
   },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 },
-  titleWrap: { flex: 1 },
-  eyebrow: { color: colors.accent, fontSize: 11, fontWeight: '800', letterSpacing: 1.3 },
-  pageTitle: { color: colors.text, fontSize: 28, fontWeight: '800', marginTop: 4 },
-  subtitle: { color: colors.textMuted, marginTop: 6, fontSize: 14 },
-  primaryButton: {
-    backgroundColor: colors.accent,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    minHeight: 46,
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  headerRowCompact: { flexDirection: 'column', alignItems: 'stretch' },
+  headerCopy: { flex: 1, minWidth: 0 },
+  eyebrow: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase' },
+  title: { color: colors.text, fontSize: 20, fontWeight: '800', marginTop: 4 },
+  subtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  createButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: colors.accent,
+    alignSelf: 'flex-start',
   },
-  primaryText: { color: '#04130d', fontWeight: '800', fontSize: 14 },
-  pressed: { opacity: 0.86 },
-  disabledButton: { opacity: 0.5 },
-  toolbar: { flexDirection: 'row', gap: 12, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' },
+  createText: { color: '#04130d', fontSize: 12, fontWeight: '800' },
+  pressed: { opacity: 0.84 },
+  disabled: { opacity: 0.5 },
+
+  toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 16 },
   toolbarCompact: { flexDirection: 'column', alignItems: 'stretch' },
-  userField: { minWidth: 140, flex: 1 },
-  label: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1.2, marginBottom: 6 },
+  refreshButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 14,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  refreshText: { color: colors.text, fontSize: 12, fontWeight: '700' },
+  branchHint: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
+
+  statusBox: {
+    marginTop: 12,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+    padding: 12,
+  },
+  statusBoxError: { backgroundColor: 'rgba(251, 113, 133, 0.08)', borderColor: 'rgba(251, 113, 133, 0.3)' },
+  statusText: { color: colors.text, fontSize: 12, fontWeight: '700' },
+  statusTextError: { color: colors.danger },
+
+  readonlyBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    backgroundColor: colors.warningSoft,
+  },
+  readonlyText: { flex: 1, color: colors.warning, fontSize: 12, lineHeight: 18 },
+  readonlyStrong: { fontWeight: '900' },
+
+  notice: { borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, borderWidth: 1 },
+  noticeSuccess: { backgroundColor: 'rgba(16, 185, 129, 0.12)', borderColor: 'rgba(16, 185, 129, 0.35)' },
+  noticeError: { backgroundColor: 'rgba(251, 113, 133, 0.12)', borderColor: 'rgba(251, 113, 133, 0.35)' },
+  noticeText: { color: colors.text, fontWeight: '700', fontSize: 12 },
+
+  tablePanel: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    overflow: 'hidden',
+    ...shadows,
+  },
+  panelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  panelTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  panelMeta: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
+
+  headRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(2, 6, 23, 0.45)',
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  headCell: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  headRight: { textAlign: 'right' },
+
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(37, 49, 73, 0.7)',
+  },
+  rowCompact: { flexDirection: 'column', alignItems: 'stretch', gap: 10, paddingVertical: 16 },
+  cellBlock: { minWidth: 0 },
+  cellLabel: { color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 5 },
+
+  colTable: { flexBasis: 140, flexGrow: 1 },
+  colType: { flexBasis: 155, flexGrow: 1 },
+  colRate: { width: 168 },
+  colHour: { width: 148 },
+  colStatus: { width: 132 },
+  colActions: { width: 110 },
+  actionsCell: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+
+  tableName: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  cellText: { color: colors.textMuted, fontSize: 12, fontWeight: '600' },
+  hourText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
+
+  rateWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  ratePrefix: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+  rateInput: {
+    width: 84,
+    minHeight: 36,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+    color: colors.accent,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  rateInputDisabled: { opacity: 0.55, color: colors.textMuted },
+
+  badge: { alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999 },
+  badgeFree: { backgroundColor: colors.accentSoft },
+  badgeBusy: { backgroundColor: colors.warningSoft },
+  badgeMaintenance: { backgroundColor: colors.surfaceRaised },
+  badgeText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  badgeTextFree: { color: colors.accent },
+  badgeTextBusy: { color: colors.warning },
+  badgeTextMaintenance: { color: colors.textMuted },
+
+  iconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  dangerButton: { backgroundColor: colors.dangerSoft, borderColor: 'rgba(251, 113, 133, 0.35)' },
+  readonlyCell: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+
+  loaderWrap: { alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 34, paddingHorizontal: 18 },
+  loaderText: { color: colors.textMuted, fontSize: 12, textAlign: 'center' },
+  errorTitle: { color: colors.danger, fontSize: 13, fontWeight: '800' },
+  retryButton: { minHeight: 38, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 9, borderWidth: 1, borderColor: colors.accent },
+  retryText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 34,
+    paddingHorizontal: 20,
+    margin: 16,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.border,
+    borderRadius: 13,
+  },
+  emptyText: { color: colors.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
+
+  footnote: { color: colors.textMuted, fontSize: 11, lineHeight: 17 },
+
+  modalLayer: { flex: 1, padding: 18, alignItems: 'center', justifyContent: 'center' },
+  modalCard: {
+    width: '100%',
+    maxWidth: 460,
+    padding: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 420,
+    padding: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    ...shadows,
+  },
+  modalEyebrow: { color: colors.accent, fontSize: 9, fontWeight: '900', letterSpacing: 1, textTransform: 'uppercase' },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginTop: 5, marginBottom: 16 },
+  confirmMessage: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
+  fieldGroup: { marginBottom: 14 },
+  label: { color: colors.textMuted, fontSize: 11, fontWeight: '700', marginBottom: 7 },
   input: {
     minHeight: 46,
-    borderRadius: 12,
+    borderRadius: 11,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surfaceRaised,
     color: colors.text,
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     paddingVertical: 10,
+    fontSize: 13,
   },
-  summaryGrid: { flexDirection: 'row', gap: 12, marginTop: 16, flexWrap: 'wrap' },
-  metricCard: {
-    flex: 1,
-    minWidth: 120,
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 14,
-  },
-  metricCardAccent: { borderColor: colors.accent },
-  metricLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700', letterSpacing: 1.2 },
-  metricValue: { color: colors.text, fontSize: 28, fontWeight: '800', marginTop: 8 },
-  loaderWrap: { marginTop: 16, alignItems: 'center', paddingVertical: 14 },
-  loaderText: { color: colors.textMuted, marginTop: 8 },
-  notice: { marginTop: 12, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14 },
-  noticeSuccess: { backgroundColor: 'rgba(16, 185, 129, 0.12)', borderWidth: 1, borderColor: 'rgba(16, 185, 129, 0.35)' },
-  noticeError: { backgroundColor: 'rgba(251, 113, 133, 0.12)', borderWidth: 1, borderColor: 'rgba(251, 113, 133, 0.35)' },
-  noticeText: { color: colors.text, fontWeight: '700' },
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-  },
-  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  sectionTitle: { color: colors.text, fontSize: 20, fontWeight: '800' },
-  sectionMeta: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
-  tableCard: {
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-  },
-  tableTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  tableNumber: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  tableMeta: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
-  badge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  badgeFree: { backgroundColor: 'rgba(16, 185, 129, 0.12)' },
-  badgeBusy: { backgroundColor: 'rgba(251, 113, 133, 0.12)' },
-  badgeMaintenance: { backgroundColor: 'rgba(245, 158, 11, 0.12)' },
-  badgeText: { color: colors.text, fontSize: 11, fontWeight: '800' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 14, gap: 12 },
-  actionButton: {
+  inlineError: { color: colors.danger, fontSize: 12, fontWeight: '700', marginTop: 10, lineHeight: 17 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 18 },
+  cancelButton: {
     minHeight: 42,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
     justifyContent: 'center',
-    alignItems: 'center',
-  },
-  primaryAction: { backgroundColor: colors.accent },
-  secondaryAction: { backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border },
-  successAction: { backgroundColor: colors.accent },
-  warningAction: { backgroundColor: colors.warning },
-  dangerAction: { backgroundColor: colors.danger },
-  actionText: { color: '#08110a', fontWeight: '800', fontSize: 13 },
-  tableStateText: { color: colors.textMuted, flex: 1, textAlign: 'right', fontSize: 12 },
-  statusCard: { marginTop: 12, borderRadius: 12, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border, padding: 12 },
-  statusCardError: { backgroundColor: 'rgba(251, 113, 133, 0.08)', borderColor: 'rgba(251, 113, 133, 0.3)' },
-  statusText: { color: colors.text, fontWeight: '700' },
-  statusTextError: { color: '#ffd4dc' },
-  sessionCard: {
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
     backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
   },
-  sessionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sessionTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  sessionMeta: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
-  sessionActions: { flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' },
-  emptyText: { color: colors.textMuted, fontSize: 14, marginTop: 8 },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(2, 6, 23, 0.82)', justifyContent: 'center', alignItems: 'center', padding: 18 },
-  modalCard: {
-    width: '100%',
-    maxWidth: 480,
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 18,
+  cancelText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  saveButton: {
+    minHeight: 42,
+    minWidth: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: colors.accent,
   },
-  modalTitle: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 14 },
-  fieldGroup: { marginBottom: 14 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 10 },
-  inlineError: { color: '#ffd4dc', marginTop: 6, fontWeight: '700' },
-  segmentRow: { flexDirection: 'row', gap: 8 },
-  segmentOption: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: 'center', backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border },
-  segmentOptionActive: { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-  segmentText: { color: colors.textMuted, fontWeight: '700' },
-  segmentTextActive: { color: colors.accent },
+  saveText: { color: '#04130d', fontSize: 12, fontWeight: '800' },
+  deleteButton: {
+    minHeight: 42,
+    minWidth: 130,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: colors.danger,
+  },
+  deleteText: { color: '#fff', fontSize: 12, fontWeight: '800' },
 });

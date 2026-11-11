@@ -16,8 +16,12 @@ async function findAll({ branchId, userId } = {}) {
 
   const { rows } = await pool.query(
     `SELECT ct.id_caja, ct.fecha_apertura, ct.fecha_cierre, ct.monto_inicial,
+            COALESCE(turn_sales.total_ventas, 0) AS ingresos_pos,
+            COALESCE(turn_rental.total_alquiler, 0) AS ingresos_alquiler,
             CASE WHEN ct.estado = 'abierta'
-              THEN ct.monto_inicial + COALESCE(turn_sales.total_ventas, 0)
+              THEN ct.monto_inicial
+                + COALESCE(turn_sales.total_ventas, 0)
+                + COALESCE(turn_rental.total_alquiler, 0)
               ELSE ct.total_calculado
             END AS total_calculado,
             ct.monto_declarado, ct.estado, ct.id_usuario,
@@ -30,8 +34,18 @@ async function findAll({ branchId, userId } = {}) {
        WHERE v.id_sucursal = ct.id_sucursal
          AND v.id_usuario = ct.id_usuario
          AND v.fecha_venta >= ct.fecha_apertura
-         AND v.fecha_venta <= NOW()
+         AND v.fecha_venta <= COALESCE(ct.fecha_cierre, NOW())
      ) turn_sales ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT SUM(sm.total_tiempo) AS total_alquiler
+       FROM sesiones_mesa sm
+       JOIN mesas m ON m.id_mesa = sm.id_mesa
+       WHERE m.id_sucursal = ct.id_sucursal
+         AND sm.id_usuario = ct.id_usuario
+         AND sm.estado = 'finalizada'
+         AND sm.hora_fin >= ct.fecha_apertura
+         AND sm.hora_fin <= COALESCE(ct.fecha_cierre, NOW())
+     ) turn_rental ON TRUE
      ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
      ORDER BY ct.fecha_apertura DESC
      LIMIT 20`,
@@ -111,16 +125,27 @@ async function close(id, { monto_declarado }) {
 
     const current = shift.rows[0];
     const total = await client.query(
-      `SELECT current_shift.monto_inicial +
-                COALESCE(SUM(v.total_productos), 0) AS total_calculado
+      `SELECT current_shift.monto_inicial
+                + COALESCE((
+                    SELECT SUM(v.total_productos)
+                    FROM ventas v
+                    WHERE v.id_sucursal = current_shift.id_sucursal
+                      AND v.id_usuario = current_shift.id_usuario
+                      AND v.fecha_venta >= current_shift.fecha_apertura
+                      AND v.fecha_venta <= NOW()
+                  ), 0)
+                + COALESCE((
+                    SELECT SUM(sm.total_tiempo)
+                    FROM sesiones_mesa sm
+                    JOIN mesas m ON m.id_mesa = sm.id_mesa
+                    WHERE m.id_sucursal = current_shift.id_sucursal
+                      AND sm.id_usuario = current_shift.id_usuario
+                      AND sm.estado = 'finalizada'
+                      AND sm.hora_fin >= current_shift.fecha_apertura
+                      AND sm.hora_fin <= NOW()
+                  ), 0) AS total_calculado
        FROM caja_turnos current_shift
-       LEFT JOIN ventas v
-         ON v.id_sucursal = current_shift.id_sucursal
-        AND v.id_usuario = current_shift.id_usuario
-        AND v.fecha_venta >= current_shift.fecha_apertura
-        AND v.fecha_venta <= NOW()
-       WHERE current_shift.id_caja = $1
-       GROUP BY current_shift.monto_inicial`,
+       WHERE current_shift.id_caja = $1`,
       [id]
     );
 

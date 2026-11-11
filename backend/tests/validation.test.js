@@ -48,6 +48,13 @@ test('venta valida asociación mesa/venta directa y sus artículos', () => {
     items: [{ id_producto: 3, cantidad: 2 }]
   });
   assert.equal(valid.error, undefined);
+  assert.deepEqual(valid.request.validatedBody, {
+    id_sucursal: 1,
+    id_usuario: 2,
+    id_sesion: null,
+    tipo_venta: 'directa',
+    items: [{ id_producto: 3, cantidad: 2 }],
+  });
   const invalid = runValidation(validateSale, {
     id_sucursal: 1, id_usuario: 2, tipo_venta: 'mesa',
     items: [{ id_producto: 3, cantidad: 2 }]

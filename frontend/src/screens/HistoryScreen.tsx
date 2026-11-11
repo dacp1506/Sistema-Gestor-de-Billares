@@ -38,11 +38,11 @@ function escapeHtml(value: unknown) {
   if (value == null) return '';
   const str = String(value);
   return str.replace(/[&<>'"]/g, (character) => ({
-    '&': '&',
-    '<': '<',
-    '>': '>',
-    "'": "'",
-    '"': '"',
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    "'": '&#39;',
+    '"': '&quot;',
   }[character] || character));
 }
 
@@ -100,7 +100,7 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
     });
   }, [dateFilter, sales, typeFilter]);
 
-  const total = visibleSales.reduce((sum, sale) => sum + Number(sale.total_productos || 0), 0);
+  const total = visibleSales.reduce((sum, sale) => sum + saleTotal(sale), 0);
   const average = visibleSales.length ? total / visibleSales.length : 0;
 
   const printReceipt = () => {
@@ -121,11 +121,22 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
     `).join('');
 
     const timestamp = new Date(selectedSale.fecha_venta).toLocaleString('es-BO');
+    const tableSale = isTableSale(selectedSale);
+    const minutes = saleMinutes(selectedSale);
+    const rate = Number(selectedSale.tarifa_minuto || 0);
+    const rental = Number(selectedSale.total_tiempo || 0);
+    const products = Number(selectedSale.total_productos || 0);
+    const grandTotal = saleTotal(selectedSale);
+    const tableLabel = selectedSale.numero_mesa ? `Mesa ${selectedSale.numero_mesa}` : `Mesa (sesión ${selectedSale.id_sesion})`;
+    const rentalRowHtml = tableSale
+      ? `<tr><td>Alquiler de mesa (${minutes} min)</td><td>1</td><td>Bs. ${rental.toFixed(2)}</td></tr>`
+      : '';
 
     printWindow.document.open();
     printWindow.document.write(`<!doctype html>
       <html lang="es"><head><meta charset="utf-8"><title>Recibo #${escapeHtml(selectedSale.id_venta)}</title>
       <style>
+        @page { size: 80mm auto; margin: 6mm; }
         @media print {
           body { margin: 0; padding: 20px; font-family: Arial, sans-serif; color: #0f172a; }
           .no-print { display: none; }
@@ -159,6 +170,7 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
         <p>Recibo #${escapeHtml(selectedSale.id_venta)}</p>
         <p class="muted">${escapeHtml(timestamp)}</p>
         <p class="muted">${escapeHtml(selectedSale.nombre_sucursal || 'Sucursal')} · ${selectedSale.tipo_venta === 'mesa' ? 'Consumo de mesa' : 'Venta directa POS'}
+        ${tableSale ? `<p class="muted">${escapeHtml(tableLabel)} · ${minutes} min × Bs. ${rate.toFixed(2)} = Bs. ${rental.toFixed(2)}</p>` : ''}
         <p class="muted">Cajero: ${escapeHtml(selectedSale.nombre_usuario || 'Operador')}</p>
         <div class="rule" style="margin:20px 0;"></div>
         <table style="width:100%; border-collapse:collapse; margin:20px 0;">
@@ -170,11 +182,13 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
             </tr>
           </thead>
           <tbody>
-            ${itemsHtml ? itemsHtml : '<tr><td colspan="3" style="text-align:center; padding:16px; color:#64748b;">Detalle no disponible</td></tr>'}
+            ${rentalRowHtml}
+            ${itemsHtml ? itemsHtml : '<tr><td colspan="3" style="text-align:center; padding:16px; color:#64748b;">Sin productos registrados</td></tr>'}
           </tbody>
         </table>
         <div class="rule" style="margin:20px 0;"></div>
-        <p style="text-align:right; font-size:18px; font-weight:bold; color:#0f172a;">Total: Bs. ${Number(selectedSale.total_productos).toFixed(2)}</p>
+        ${tableSale ? `<p style="text-align:right; font-size:12px; color:#334155; margin:2px 0;">Productos: Bs. ${products.toFixed(2)}</p>` : ''}
+        <p style="text-align:right; font-size:18px; font-weight:bold; color:#0f172a;">Total: Bs. ${grandTotal.toFixed(2)}</p>
         <p class="muted" style="font-size:11px; color:#64748b;">Pago: ${escapeHtml('Efectivo / QR')}
         <div class="receipt-footer" style="margin-top:30px; border-top:1px solid #cbd5e1; padding-top:20px;">
           <p class="muted" style="font-size:11px; color:#64748b;">¡Gracias por jugar en Bola8!</p>
@@ -331,12 +345,13 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
                   <Text style={styles.saleMeta}>{formatDate(sale.fecha_venta)}</Text>
                   <Text numberOfLines={1} style={styles.saleMeta}>
                     {sale.nombre_sucursal || `Sucursal ${sale.id_sucursal}`} · {sale.nombre_usuario || `Operador ${sale.id_usuario}`}
+                    {isTableSale(sale) ? ` · ${saleMinutes(sale)} min` : ''}
                   </Text>
                 </View>
               </View>
               <View style={styles.saleRight}>
                 <Text style={styles.saleKind}>{sale.tipo_venta === 'mesa' ? 'Mesa + consumo' : 'Venta directa POS'}</Text>
-                <Text style={styles.saleAmount}>Bs. {Number(sale.total_productos || 0).toFixed(2)}</Text>
+                <Text style={styles.saleAmount}>Bs. {saleTotal(sale).toFixed(2)}</Text>
               </View>
             </Pressable>
           ))}
@@ -363,9 +378,33 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
                 <ReceiptInfo label="Sucursal" value={selectedSale.nombre_sucursal || `Sucursal ${selectedSale.id_sucursal}`} />
                 <ReceiptInfo label="Atendido por" value={selectedSale.nombre_usuario || `Operador ${selectedSale.id_usuario}`} />
                 <ReceiptInfo label="Tipo" value={selectedSale.tipo_venta === 'mesa' ? `Mesa + consumo · sesión ${selectedSale.id_sesion}` : 'Venta directa POS'} />
+                {isTableSale(selectedSale) ? (
+                  <>
+                    <ReceiptInfo
+                      label="Mesa"
+                      value={selectedSale.numero_mesa ? `Mesa ${selectedSale.numero_mesa}` : `Mesa (sesión ${selectedSale.id_sesion})`}
+                    />
+                    <ReceiptInfo label="Tiempo utilizado" value={`${saleMinutes(selectedSale)} min`} />
+                    <ReceiptInfo
+                      label="Tarifa por minuto"
+                      value={`Bs. ${Number(selectedSale.tarifa_minuto || 0).toFixed(2)}`}
+                    />
+                  </>
+                ) : null}
                 <ReceiptInfo label="Pago" value={'Efectivo / QR'} />
                 <View style={styles.receiptDivider} />
-                <Text style={styles.itemsHeading}>Detalle</Text>
+                {isTableSale(selectedSale) ? (
+                  <View style={styles.receiptItem}>
+                    <View style={styles.receiptItemCopy}>
+                      <Text style={styles.receiptItemName}>Alquiler de mesa</Text>
+                      <Text style={styles.receiptItemMeta}>
+                        {saleMinutes(selectedSale)} min × Bs. {Number(selectedSale.tarifa_minuto || 0).toFixed(2)}
+                      </Text>
+                    </View>
+                    <Text style={styles.receiptItemTotal}>Bs. {Number(selectedSale.total_tiempo || 0).toFixed(2)}</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.itemsHeading}>Productos</Text>
                 {selectedSale.detalles?.length ? selectedSale.detalles.map((item) => (
                   <View key={String(item.id_detalle)} style={styles.receiptItem}>
                     <View style={styles.receiptItemCopy}>
@@ -376,16 +415,39 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
                   </View>
                 )) : <Text style={styles.emptyDetails}>El detalle de artículos no está disponible para esta venta.</Text>}
                 <View style={styles.receiptDivider} />
+                {isTableSale(selectedSale) ? (
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>Subtotal alquiler</Text>
+                    <Text style={styles.totalLabel}>Bs. {Number(selectedSale.total_tiempo || 0).toFixed(2)}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Subtotal productos</Text>
+                  <Text style={styles.totalLabel}>Bs. {Number(selectedSale.total_productos || 0).toFixed(2)}</Text>
+                </View>
                 <View style={styles.totalRow}>
                   <Text style={styles.totalLabel}>TOTAL</Text>
-                  <Text style={styles.totalValue}>Bs. {Number(selectedSale.total_productos).toFixed(2)}</Text>
+                  <Text style={styles.totalValue}>Bs. {saleTotal(selectedSale).toFixed(2)}</Text>
                 </View>
                 {printError ? <Text style={styles.printError}>{printError}</Text> : null}
               </ScrollView>
 
-              <Pressable accessibilityRole="button" onPress={() => setSelectedSale(null)} style={styles.secondaryButton}>
-                <Text style={styles.secondaryText}>Cerrar</Text>
-              </Pressable>
+              <View style={styles.modalActions}>
+                <Pressable accessibilityRole="button" onPress={() => setSelectedSale(null)} style={styles.secondaryButton}>
+                  <Text style={styles.secondaryText}>Cerrar</Text>
+                </Pressable>
+                {Platform.OS === 'web' ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Imprimir o guardar el recibo en PDF"
+                    onPress={printReceipt}
+                    style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+                  >
+                    <Printer color="#04130d" size={16} />
+                    <Text style={styles.primaryText}>Imprimir / Guardar PDF</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           </View>
         ) : null}
@@ -397,6 +459,19 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Fecha no disponible' : date.toLocaleString('es-BO');
+}
+
+function isTableSale(sale: Sale) {
+  return sale.tipo_venta === 'mesa' && sale.id_sesion != null;
+}
+
+function saleMinutes(sale: Sale) {
+  const minutes = Number(sale.minutos_totales);
+  return Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0;
+}
+
+function saleTotal(sale: Sale) {
+  return Number((Number(sale.total_productos || 0) + Number(sale.total_tiempo || 0)).toFixed(2));
 }
 
 function MetricCard({
@@ -422,7 +497,7 @@ function MetricCard({
         <Text style={styles.metricLabel}>{label}</Text>
         <Text numberOfLines={1} style={[styles.metricValue, accent && styles.metricValueAccent, warning && styles.metricValueWarning]}>{value}</Text>
       </View>
-      <View style={styles.metricIcon, accent && styles.metricIconAccent, warning && styles.metricIconWarning}>
+      <View style={[styles.metricIcon, accent && styles.metricIconAccent, warning && styles.metricIconWarning]}>
         <Icon color={accent ? colors.accent : warning ? colors.warning : colors.info} size={19} />
       </View>
     </View>
@@ -523,4 +598,10 @@ const styles = StyleSheet.create({
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   totalLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '900' },
   totalValue: { color: colors.accent, fontSize: 20, fontWeight: '900' },
+  printError: { color: colors.danger, fontSize: 11, marginTop: 10, textAlign: 'center' },
+  secondaryButton: { minHeight: 40, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: 9, borderWidth: 1, borderColor: colors.border },
+  secondaryText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 9, flexWrap: 'wrap', marginTop: 12 },
+  primaryButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14, borderRadius: 9, backgroundColor: colors.accent },
+  primaryText: { color: '#04130d', fontSize: 12, fontWeight: '800' },
 });

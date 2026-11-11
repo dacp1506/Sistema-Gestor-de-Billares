@@ -70,23 +70,30 @@ async function getSummary({ branchId, period }) {
      GROUP BY periodo ORDER BY periodo`,
     values,
   );
+  const branchValues = [];
+  const byBranchPredicate = branchId ? `AND events.branch_id = $${branchValues.push(branchId)}` : '';
   const byBranch = await pool.query(
     `WITH events AS (
-       SELECT fecha_venta AS event_date, id_sucursal AS branch_id, total_productos AS amount FROM ventas
+       SELECT fecha_venta AS event_date, id_sucursal AS branch_id, total_productos AS amount,
+              tipo_venta AS kind
+       FROM ventas
        WHERE fecha_venta >= ${selected.start}
        UNION ALL
-       SELECT sm.hora_fin, m.id_sucursal, sm.total_tiempo FROM sesiones_mesa sm
+       SELECT sm.hora_fin, m.id_sucursal, sm.total_tiempo, 'sesion'
+       FROM sesiones_mesa sm
        JOIN mesas m ON m.id_mesa = sm.id_mesa
        WHERE sm.estado = 'finalizada' AND sm.hora_fin >= ${selected.start}
      )
      SELECT s.id_sucursal, s.nombre,
+            COALESCE(SUM(events.amount) FILTER (WHERE events.kind = 'sesion'), 0)::NUMERIC(12,2) AS alquiler_mesas,
+            COALESCE(SUM(events.amount) FILTER (WHERE events.kind <> 'sesion'), 0)::NUMERIC(12,2) AS ventas_productos,
             COALESCE(SUM(events.amount), 0)::NUMERIC(12,2) AS total
      FROM sucursales s
      JOIN events ON events.branch_id = s.id_sucursal
      WHERE events.branch_id IS NOT NULL AND events.event_date < NOW()
-       ${branchId ? `AND s.id_sucursal = $${values.push(branchId)}` : ''}
+       ${byBranchPredicate}
      GROUP BY s.id_sucursal, s.nombre ORDER BY total DESC, s.nombre`,
-    values,
+    branchValues,
   );
   return {
     period,

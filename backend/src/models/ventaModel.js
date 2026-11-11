@@ -116,10 +116,15 @@ async function findAll({ branchId, limit = 50 } = {}) {
     `SELECT v.id_venta, v.fecha_venta, v.tipo_venta, v.total_productos,
             v.id_sesion, v.id_sucursal, v.id_usuario,
             s.nombre AS nombre_sucursal, u.nombre AS nombre_usuario,
+            m.numero_mesa,
+            sm.minutos_totales, sm.total_tiempo, sm.tarifa_minuto,
+            sm.hora_inicio AS sesion_hora_inicio, sm.hora_fin AS sesion_hora_fin,
             COALESCE(detalles.items, '[]'::json) AS detalles
      FROM ventas v
      JOIN sucursales s ON s.id_sucursal = v.id_sucursal
      JOIN usuarios u ON u.id_usuario = v.id_usuario
+     LEFT JOIN sesiones_mesa sm ON sm.id_sesion = v.id_sesion
+     LEFT JOIN mesas m ON m.id_mesa = sm.id_mesa
      LEFT JOIN LATERAL (
        SELECT json_agg(json_build_object(
          'id_detalle', dv.id_detalle,

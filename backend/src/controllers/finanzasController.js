@@ -1,12 +1,15 @@
 const Venta = require('../models/ventaModel');
 
 async function create(request, response) {
+  const isGeneralAdmin = request.user.rol === 'admin_general';
   const input = {
     ...request.validatedBody,
-    id_sucursal: request.user.rol === 'admin_general'
+    id_sucursal: isGeneralAdmin
       ? request.validatedBody.id_sucursal
       : Number(request.user.id_sucursal || request.validatedBody.id_sucursal),
-    id_usuario: Number(request.user.sub),
+    id_usuario: isGeneralAdmin
+      ? Number(request.validatedBody.id_usuario)
+      : Number(request.user.sub),
   };
   const sale = await Venta.create(input);
   response.status(201).json({ data: sale });

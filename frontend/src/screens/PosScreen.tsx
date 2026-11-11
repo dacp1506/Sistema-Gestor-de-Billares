@@ -251,10 +251,11 @@ export default function PosScreen({ user, initialBranchId, initialTableId, onBac
     const style = document.createElement('style');
     style.id = 'bola8-pos-print';
     style.textContent = [
+      '@page { size: 80mm auto; margin: 6mm; }',
       '@media print {',
       '  body * { visibility: hidden !important; }',
       '  #bola8-receipt-print, #bola8-receipt-print * { visibility: visible !important; }',
-      '  #bola8-receipt-print { position: absolute !important; left: 0 !important; top: 0 !important; width: 100% !important; background: #fff !important; color: #0f172a !important; padding: 24px !important; }',
+      '  #bola8-receipt-print { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; max-height: none !important; overflow: visible !important; background: #fff !important; color: #0f172a !important; padding: 0 !important; border: none !important; border-radius: 0 !important; box-shadow: none !important; }',
       '}',
     ].join('\n');
     document.head.appendChild(style);
@@ -1056,7 +1057,7 @@ export default function PosScreen({ user, initialBranchId, initialTableId, onBac
                     style={({ pressed }) => [styles.modalPrimary, pressed && styles.pressed]}
                   >
                     <Printer color={colors.text} size={16} />
-                    <Text style={styles.modalPrimaryText}>Imprimir / PDF</Text>
+                    <Text style={styles.modalPrimaryText}>Imprimir / Guardar PDF</Text>
                   </Pressable>
                 </>
               )}

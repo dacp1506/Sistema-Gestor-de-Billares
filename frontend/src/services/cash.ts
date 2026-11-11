@@ -9,6 +9,8 @@ export type CashShift = {
   fecha_cierre?: string | null;
   monto_inicial: number;
   total_calculado: number;
+  ingresos_alquiler?: number;
+  ingresos_pos?: number;
   monto_declarado: number | null;
   estado: 'abierta' | 'cerrada';
 };

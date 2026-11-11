@@ -23,12 +23,15 @@ async function list(request, response) {
 }
 
 async function open(request, response) {
+  const isGeneralAdmin = request.user.rol === 'admin_general';
   const input = {
     ...request.validatedBody,
-    id_sucursal: request.user.rol === 'admin_general'
+    id_sucursal: isGeneralAdmin
       ? request.validatedBody.id_sucursal
       : Number(request.user.id_sucursal),
-    id_usuario: Number(request.user.sub),
+    id_usuario: isGeneralAdmin
+      ? Number(request.validatedBody.id_usuario)
+      : Number(request.user.sub),
   };
   const shift = await Caja.open(input);
   response.status(201).json({ data: shift });

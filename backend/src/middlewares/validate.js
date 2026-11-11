@@ -118,6 +118,13 @@ function validateSale(request, response, next) {
     });
   }
   if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+  request.validatedBody = {
+    id_sucursal,
+    id_usuario,
+    id_sesion: id_sesion ?? null,
+    tipo_venta,
+    items: items.map((item) => ({ id_producto: item.id_producto, cantidad: item.cantidad })),
+  };
   return next();
 }
 

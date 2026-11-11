@@ -22,6 +22,8 @@ export type FinancialReport = {
   branches: Array<{
     id_sucursal: number | string;
     nombre: string;
+    alquiler_mesas: number | string;
+    ventas_productos: number | string;
     total: number | string;
   }>;
 };

@@ -26,10 +26,10 @@ test('financial report uses safe periods and filters future events for branch to
 
   assert.equal(result.period, 'diario');
   assert.equal(calls.length, 3);
-  assert.deepEqual(calls.map((call) => call.values), [[7], [7], [7, 7]]);
+  assert.deepEqual(calls.map((call) => call.values), [[7], [7], [7]]);
   assert.match(calls[0].text, /COUNT\(\*\) FILTER/);
   assert.match(calls[2].text, /events\.event_date < NOW\(\)/);
-  assert.match(calls[2].text, /s\.id_sucursal = \$2/);
+  assert.match(calls[2].text, /events\.branch_id = \$1/);
 });
 
 test('financial report rejects unsupported periods before querying the database', async () => {

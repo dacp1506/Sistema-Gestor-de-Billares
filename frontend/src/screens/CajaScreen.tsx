@@ -11,7 +11,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Banknote, Calendar, Loader2, X, Menu } from 'lucide-react-native';
+import { Banknote, Calculator, Calendar, Loader2, X, Menu } from 'lucide-react-native';
 import { useAccessibleModal } from '../hooks/useAccessibleModal';
 import { ApiError } from '../services/api';
 import type { AuthUser } from '../services/auth';
@@ -54,6 +54,8 @@ export default function CajaScreen({ user }: { user: AuthUser }) {
   const [selectedShift, setSelectedShift] = useState<CajaShift | null>(null);
   const [openModal, setOpenModal] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [branchLoading, setBranchLoading] = useState(false);
+  const [branchError, setBranchError] = useState<string | null>(null);
   useAccessibleModal(Boolean(selectedShift), () => setSelectedShift(null));
 
   const loadBranches = useCallback(async () => {
@@ -295,86 +297,86 @@ export default function CajaScreen({ user }: { user: AuthUser }) {
           </View>
         ) : (
           <View style={styles.mainContent}>
-            <View style={statsCard}>
-              <View style={statsHeader}>
-                <Text style={statsTitle}>Estadísticas del Período</Text>
-                <Text style={statsSubtitle}>Período: {period}</Text>
+            <View style={styles.statsCard}>
+              <View style={styles.statsHeader}>
+                <Text style={styles.statsTitle}>Estadísticas del Período</Text>
+                <Text style={styles.statsSubtitle}>Período: {period}</Text>
               </View>
               
-              <View style={statsGrid}>
-                <View style={statCard}>
-                  <Text style={statIcon}><Banknote color={colors.accent} size={20} /></Text>
-                  <Text style={statValue}>${stats?.ventasTotales || 0}</Text>
-                  <Text style={statLabel}>Ventas</Text>
+              <View style={styles.statsGrid}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statIcon}><Banknote color={colors.accent} size={20} /></Text>
+                  <Text style={styles.statValue}>{Number(stats?.ventasTotales || 0).toFixed(2)}</Text>
+                  <Text style={styles.statLabel}>Ventas</Text>
                 </View>
-                <View style={statCard}>
-                  <Text style={statIcon}><Calculator color={colors.info} size={20} /></Text>
-                  <Text style={statValue}>Bs. {Number(stats?.efectivoTotal || 0).toFixed(2)}</Text>
-                  <Text style={statLabel}>Efectivo</Text>
+                <View style={styles.statCard}>
+                  <Text style={styles.statIcon}><Calculator color={colors.info} size={20} /></Text>
+                  <Text style={styles.statValue}>Bs. {Number(stats?.efectivoTotal || 0).toFixed(2)}</Text>
+                  <Text style={styles.statLabel}>Efectivo</Text>
                 </View>
-                <View style={statCard}>
-                  <Text style={statIcon}><Calendar color={colors.warning} size={20} /></Text>
-                  <Text style={statValue}>{stats?.turnosAbiertos || 0}</Text>
-                  <Text style={statLabel}>Turnos Abiertos</Text>
+                <View style={styles.statCard}>
+                  <Text style={styles.statIcon}><Calendar color={colors.warning} size={20} /></Text>
+                  <Text style={styles.statValue}>{stats?.turnosAbiertos || 0}</Text>
+                  <Text style={styles.statLabel}>Turnos Abiertos</Text>
                 </View>
-                <View style={statCard}>
-                  <Text style={statIcon}><X color={colors.danger} size={20} /></Text>
-                  <Text style={statValue}>{stats?.turnosCerrados || 0}</Text>
-                  <Text style={statLabel}>Turnos Cerrados</Text>
+                <View style={styles.statCard}>
+                  <Text style={styles.statIcon}><X color={colors.danger} size={20} /></Text>
+                  <Text style={styles.statValue}>{stats?.turnosCerrados || 0}</Text>
+                  <Text style={styles.statLabel}>Turnos Cerrados</Text>
                 </View>
               </View>
             </View>
 
             {shifts.length > 0 ? (
-              <View style={shiftsCard}>
-                <View style={shiftsHeader}>
-                  <Text style={shiftsTitle}>Movimientos de Caja</Text>
-                  <Text style={shiftsSubtitle}>${shifts.length} registros</Text>
+              <View style={styles.shiftsCard}>
+                <View style={styles.shiftsHeader}>
+                  <Text style={styles.shiftsTitle}>Movimientos de Caja</Text>
+                  <Text style={styles.shiftsSubtitle}>{shifts.length} registros</Text>
                 </View>
                 
-                <View style={shiftsList}>
+                <View style={styles.shiftsList}>
                   {shifts.map((shift) => (
-                    <View key={String(shift.id_caja)} style={shiftRow}>
-                      <View style={shiftInfo}>
-                        <Text style={shiftRowTitle}>${shift.fecha_apertura}</Text>
-                        <Text style={shiftRowSubtitle}>${shift.nombre_usuario || 'Operador'}</Text>
+                    <View key={String(shift.id_caja)} style={styles.shiftRow}>
+                      <View style={styles.shiftInfo}>
+                        <Text style={styles.shiftRowTitle}>{shift.fecha_apertura}</Text>
+                        <Text style={styles.shiftRowSubtitle}>{shift.nombre_usuario || 'Operador'}</Text>
                       </View>
-                      <View style={shiftAmount}>
-                        <Text style={shiftRowValue}>Bs. ${Number(shift.total_calculado || 0).toFixed(2)}</Text>
-                        <Text style={shiftRowLabel}>Total</Text>
+                      <View style={styles.shiftAmount}>
+                        <Text style={styles.shiftRowValue}>Bs. {Number(shift.total_calculado || 0).toFixed(2)}</Text>
+                        <Text style={styles.shiftRowLabel}>Total</Text>
                       </View>
-                      <View style={shiftStatus}>
-                        <Text style={shiftRowStatus}>{shift.estado === 'abierta' ? 'Abierta' : 'Cerrada'}</Text>
+                      <View style={styles.shiftStatus}>
+                        <Text style={styles.shiftRowStatus}>{shift.estado === 'abierta' ? 'Abierta' : 'Cerrada'}</Text>
                       </View>
                     </View>
                   ))}
                 </View>
                 
                 {selectedShift && (
-                  <View style={shiftDetail}>
-                    <View style={detailHeader}>
-                      <Text style={detailTitle}>Detalle del Turno #${selectedShift.id_caja}</Text>
-                      <Pressable accessibilityRole="button" onPress={() => setSelectedShift(null)} style={detailCloseButton}>
+                  <View style={styles.shiftDetail}>
+                    <View style={styles.detailHeader}>
+                      <Text style={styles.detailTitle}>Detalle del Turno #{selectedShift.id_caja}</Text>
+                      <Pressable accessibilityRole="button" onPress={() => setSelectedShift(null)} style={styles.detailCloseButton}>
                         <X color={colors.textMuted} size={16} /> Cerrar
                       </Pressable>
                     </View>
                     
-                    <View style={detailGrid}>
-                      <View style={detailRow}>
-                        <Text style={detailLabel}>Monto Inicial</Text>
-                        <Text style={detailValue}>Bs. ${Number(selectedShift.monto_inicial).toFixed(2)}</Text>
+                    <View style={styles.detailGrid}>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Monto Inicial</Text>
+                        <Text style={styles.detailValue}>Bs. {Number(selectedShift.monto_inicial).toFixed(2)}</Text>
                       </View>
-                      <View style={detailRow}>
-                        <Text style={detailLabel}>Total Calculado</Text>
-                        <Text style={detailValue}>Bs. ${Number(selectedShift.total_calculado).toFixed(2)}</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Total Calculado</Text>
+                        <Text style={styles.detailValue}>Bs. {Number(selectedShift.total_calculado).toFixed(2)}</Text>
                       </View>
-                      <View style={detailRow}>
-                        <Text style={detailLabel}>Monto Declarado</Text>
-                        <Text style={detailValue}>Bs. ${Number(selectedShift.monto_declarado).toFixed(2)}</Text>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Monto Declarado</Text>
+                        <Text style={styles.detailValue}>Bs. {Number(selectedShift.monto_declarado).toFixed(2)}</Text>
                       </View>
-                      <View style={detailRow}>
-                        <Text style={detailLabel}>Diferencia</Text>
-                        <Text style={detailValueDifference}>
+                      <View style={styles.detailRow}>
+                        <Text style={styles.detailLabel}>Diferencia</Text>
+                        <Text style={styles.detailValueDifference}>
                           {selectedShift.monto_declarado >= selectedShift.total_calculado 
                             ? '+' + (selectedShift.monto_declarado - selectedShift.total_calculado).toFixed(2)
                             : '-' + (selectedShift.total_calculado - selectedShift.monto_declarado).toFixed(2)}
@@ -382,39 +384,39 @@ export default function CajaScreen({ user }: { user: AuthUser }) {
                       </View>
                     </View>
                     
-                    <View style={detailActions}>
-                      {shift.estado === 'abierta' ? (
-                        <Pressable accessibilityRole="button" onPress={handleCloseShift} style={closeButton}>
-                          <Text style={closeButtonText}>Cerrar Turno</Text>
+                    <View style={styles.detailActions}>
+                      {selectedShift.estado === 'abierta' ? (
+                        <Pressable accessibilityRole="button" onPress={handleCloseShift} style={styles.closeButton}>
+                          <Text style={styles.closeButtonText}>Cerrar Turno</Text>
                         </Pressable>
                       ) : (
-                        <Text style={closedText}>Turno Cerrado</Text>
+                        <Text style={styles.closedText}>Turno Cerrado</Text>
                       )}
-                      <Pressable accessibilityRole="button" onPress={handlePrintShift} style={printButton}>
-                        <Text style={printButtonText}>Imprimir Recibo</Text>
+                      <Pressable accessibilityRole="button" onPress={handlePrintShift} style={styles.printButton}>
+                        <Text style={styles.printButtonText}>Imprimir Recibo</Text>
                       </Pressable>
                     </View>
                   </View>
                 )}
               </View>
             ) : (
-              <View style={emptyState}>
-                <Text style={emptyIcon}><Banknote color={colors.textMuted} size={40} /></Text>
-                <Text style={emptyText}>No hay movimientos de caja para el período seleccionado.</Text>
-                <Text style={emptySubtitle}>Selecciona un período y sucursal para ver los registros.</Text>
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyIcon}><Banknote color={colors.textMuted} size={40} /></Text>
+                <Text style={styles.emptyText}>No hay movimientos de caja para el período seleccionado.</Text>
+                <Text style={styles.emptySubtitle}>Selecciona un período y sucursal para ver los registros.</Text>
               </View>
             )}
           </View>
         )}
 
-        <View style={actionsBar}>
+        <View style={styles.actionsBar}>
           {shifts.length > 0 && selectedShift && selectedShift.estado === 'abierta' ? (
-            <Pressable accessibilityRole="button" onPress={handleCloseShift} style={closeButtonAction}>
-              <Text style={closeButtonActionText}>Cerrar Turno Actual</Text>
+            <Pressable accessibilityRole="button" onPress={handleCloseShift} style={styles.closeButtonAction}>
+              <Text style={styles.closeButtonActionText}>Cerrar Turno Actual</Text>
             </Pressable>
           ) : null}
-          <Pressable accessibilityRole="button" onPress={() => setShifts([])} style={refreshButton}>
-            <Text style={refreshButtonText}>Refrescar</Text>
+          <Pressable accessibilityRole="button" onPress={() => setShifts([])} style={styles.refreshButton}>
+            <Text style={styles.refreshButtonText}>Refrescar</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -451,7 +453,7 @@ const styles = StyleSheet.create({
   statsSubtitle: { color: colors.textMuted, fontSize: 10 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 },
   statCard: { flex: 1, minWidth: 120, backgroundColor: colors.surfaceRaised, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 15 },
-  statIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center, backgroundColor: colors.accentSoft }},
+  statIcon: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
   statValue: { color: colors.text, fontSize: 22, fontWeight: '800', marginTop: 8 },
   statLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700', marginTop: 4, textTransform: 'uppercase' },
   shiftsCard: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 20, ...shadows, marginTop: 16 },
@@ -467,10 +469,10 @@ const styles = StyleSheet.create({
   shiftRowValue: { color: colors.accent, fontSize: 16, fontWeight: '800' },
   shiftRowLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
   shiftStatus: { marginLeft: 12 },
-  shiftRowStatus: { padding: 4 8, borderRadius: 12, fontSize: 10, fontWeight: '600', textTransform: 'uppercase' },
+  shiftRowStatus: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 12, fontSize: 10, fontWeight: '600', textTransform: 'uppercase' },
   shiftRowStatusAbierta: { backgroundColor: 'rgba(16, 185, 129, 0.12)', color: colors.accent },
   shiftRowStatusCerrada: { backgroundColor: 'rgba(251, 113, 133, 0.12)', color: colors.danger },
-  emptyState: { padding: 40, textAlign: 'center', color: colors.textMuted },
+  emptyState: { padding: 40, alignItems: 'center' },
   emptyIcon: { width: 40, height: 40 },
   emptyText: { fontSize: 16, marginTop: 12, color: colors.textMuted },
   emptySubtitle: { fontSize: 12, marginTop: 8, color: colors.textMuted },
@@ -489,6 +491,11 @@ const styles = StyleSheet.create({
   detailValueDifference: { color: colors.warning, fontSize: 16, fontWeight: '600' },
   printButton: { minHeight: 40, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, paddingHorizontal: 14, borderRadius: 9, backgroundColor: colors.accent },
   printButtonText: { color: '#04130d', fontSize: 12, fontWeight: '800' },
-  refreshButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 9, borderWidth: 1, borderColor: colors.border },
   refreshButtonText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  retryButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 9, borderWidth: 1, borderColor: colors.accent },
+  retryText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
+  shiftDetail: { marginTop: 16, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceRaised },
+  detailActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 18 },
+  closedText: { color: colors.textMuted, fontSize: 12, fontWeight: '700', alignSelf: 'center' },
+  disabled: { opacity: 0.55 },
 });
