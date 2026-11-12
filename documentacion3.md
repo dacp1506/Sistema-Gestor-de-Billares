@@ -38,6 +38,8 @@ El trabajo se realizará en orden. Las decisiones que condicionan la arquitectur
 | Módulo siguiente — Usuarios y operadores | Implementado y verificado | **Respuesta del estudiante:** “sigamos”. | Se añadió la gestión de usuarios en backend (`/api/usuarios`) y la pantalla `UsersScreen` en Expo para crear operadores con rol y sucursal, activar/desactivar y eliminar usuarios lógicos. La validación incluye correo, contraseña, rol y asignación de sucursal. Evidencia: `npm --prefix frontend run typecheck` y `npm --prefix backend run check` siguen OK. |
 | Módulo siguiente — Turnos de caja | Implementado y verificado | **Respuesta del estudiante:** “continuamos con la caja”. | Se completa la lógica de flujo de caja con apertura/cierre de turno, validación de `monto_inicial` y `monto_declarado`, y la pantalla en la pestaña de caja para abrir y cerrar turno por sucursal. La API rest expone `/api/caja` con filtros por sucursal y usuario, mientras la validación backend cubre los casos positivos y negativos. Evidencia: `npm --prefix backend run check` -> 11 pruebas OK; `npm --prefix frontend run typecheck` -> OK. |
 | Siguiente fase — autenticación JWT | Implementado y validado | **Respuesta del estudiante:** “continua” y se pidió cerrar la capa de seguridad básica. | Se añadió `POST /api/auth/login` con validación de email/password, generación de JWT y middleware `requireAuth`/`requireRole`. La base de usuarios queda con `findByEmail`, el seed usa hashes reales y vuelta a usar `hashPassword` compartido. Evidencia: pruebas backend actualizadas y aprobadas con `node --test`: 13 pruebas OK. |
+| Módulos de administración — Inventario local, Sucursales cadena y Usuarios y roles | Implementado y verificado contra la base real | **Respuesta del estudiante:** “desarrolla completamente los módulos de inventario local, sucursal cadena y usuario y roles; tiene que estar igual que `DATA TO BUILD/index.html` (solo maqueta, sin funcionalidad)”. | Las tres pantallas de Expo se reescribieron con la maqueta como referencia visual y contra la API real, sin datos de sustitución: inventario con tabla responsive y reabastecer **+10 Unid.**; tarjetas de sucursal con Mesas Activas, Ingresos Hoy y “Administrar esta Sucursal”; usuarios con KPIs, filtros, tabla y alta/edición/baja. El backend añadió las métricas por sucursal en `GET /api/sucursales` y el parámetro `?inactivas=true` en `GET /api/usuarios`; el dashboard acepta la prop `initialBranchId`. Evidencia: `npm run check` -> 30 pruebas backend OK y typecheck frontend OK; consulta de solo lectura a la base real devolvió `mesas_total=4`, `mesas_ocupadas=0`, `ingresos_hoy=24.00` y 4 cuentas reales. |
+| Módulo de Configuración App | Implementado y verificado contra la base real | **Respuesta del estudiante:** “desarrolla la parte de configuración; tiene que estar igual que la maqueta”. | Se creó el módulo de Configuración App con el panel de la maqueta (tema, idioma, moneda, facturación y ticket) y persistencia real: tabla `configuraciones_usuario`, endpoints `GET|PUT /api/configuraciones` y validación `validateSettings`. El nombre comercial y el formato de impresión se aplican al comprobante del historial. Evidencia: `npm run check` -> 31 pruebas backend OK y typecheck frontend OK; `GET` devolvió los valores por defecto, `PUT` guardó, el `GET` posterior devolvió lo guardado, un `PUT` inválido respondió 400 y sin token 401. |
 
 ## Decisión registrada — arquitectura de frontend
 
@@ -83,6 +85,8 @@ Reglas confirmadas en las validaciones del backend: `nombre` obligatorio (hasta 
 | Registrada la primera sucursal a petición del estudiante y verificado su inventario vacío. | `POST /api/sucursales`, `GET /api/sucursales`, `GET /api/productos?id_sucursal=1` | Creación HTTP 201; listado HTTP 200 con una sucursal; inventario HTTP 200 con cero productos. Nombre/dirección/teléfono no se replican en documentación. |
 | El estudiante guardó el primer producto desde Expo; a petición suya se corrigió en esa misma interfaz y se verificó por API. | Pantalla Expo, `GET /api/productos?id_sucursal=1` | Producto final: Fanta, Bs 6, stock 10, mínimo 0, categoría Bebidas. Respuesta API HTTP 200; un producto encontrado y todos los campos coinciden. |
 | Corregida una validación incorrecta en la ruta de listado de mesas por sucursal. | `backend/src/routes/mesaRoutes.js` | La ruta `/api/mesas/sucursal/:id_sucursal` ya no aplica `validateId`, que esperaba `params.id`; ahora el controlador valida `id_sucursal`. Una sucursal válida responde HTTP 200; un ID inválido responde HTTP 400 `BRANCH_REQUIRED`. `npm run check`: ocho pruebas backend y chequeo de tipos aprobados. |
+| Reimplementados los módulos de inventario, sucursales cadena y usuarios y roles siguiendo la maqueta, con las métricas por sucursal calculadas en el backend y el filtro de usuarios inactivos habilitado. | `frontend/src/screens/ProductsScreen.tsx`, `frontend/src/screens/BranchesScreen.tsx`, `frontend/src/screens/UsersScreen.tsx`, `frontend/App.tsx`, `frontend/src/services/branches.ts`, `frontend/src/services/users.ts`, `backend/src/models/sucursalModel.js` | `npm run check`: 30 pruebas backend aprobadas y typecheck sin errores. Consulta de solo lectura a la base real: `GET /api/sucursales` devolvió `mesas_total=4`, `mesas_ocupadas=0` e `ingresos_hoy=24.00`; `GET /api/usuarios?inactivas=true` devolvió 4 cuentas reales. |
+| Añadido el módulo de Configuración App, con preferencias persistidas por cuenta y su aplicación en el comprobante del historial. | `backend/src/models/configuracionModel.js`, `backend/src/controllers/configuracionController.js`, `backend/src/routes/configuracionRoutes.js`, `backend/database/migrations/add_user_settings.sql`, `frontend/src/services/settings.ts`, `frontend/src/screens/SettingsScreen.tsx`, `frontend/App.tsx`, `frontend/src/screens/HistoryScreen.tsx` | `npm run check`: 31 pruebas backend y typecheck sin errores; export web con 2306 módulos. Prueba HTTP: `GET` devolvió los valores por defecto, `PUT` guardó y respondió 200, `PUT` inválido respondió 400 y sin token 401. |
 
 | Módulo siguiente — Reservas de mesa | Implementado y verificado | **Respuesta del estudiante:** “continua”. | Se incorpora la API `GET|POST /api/reservas` y la vista `ReservationsScreen`, con validación de horario, conflicto de solapamiento por mesa y mantenimiento del estado de la reserva desde la interfaz. La navegación principal del cliente incluye la nueva pestaña y la validación backend cubre datos y estados. Evidencia: `npm --prefix backend run check` -> 12 pruebas OK; `npm --prefix frontend run typecheck` -> OK. |
 
@@ -185,3 +189,76 @@ Verificación de esta actualización: pruebas backend, typecheck del cliente y e
 Se agregó la opción “Registrar administrador” en la pantalla de login y `POST /api/auth/register`. Este registro crea únicamente el primer `admin_general`; se serializa en PostgreSQL y se cierra cuando ya hay una cuenta de ese rol. Así se evita que cualquier visitante pueda registrarse como administrador una vez configurado el sistema. El correo se valida por formato, pero no se verifica por email. Las demás cuentas se crean desde “Usuarios y roles”.
 
 El mensaje `email debe ser un correo válido` ya no aparece cuando el formulario de una cuenta de sucursal envía el campo `email` vacío; si se envía un correo con contenido para un usuario de sucursal, se sigue rechazando.
+
+## Continuación 2026-11-12 — Inventario local, sucursales cadena y usuarios y roles
+
+El estudiante pidió completar los tres módulos de administración con la apariencia de la maqueta `DATA TO BUILD/index.html`, aclarando que ese HTML es solo referencia visual y no tiene funcionalidad. Se reescribieron las tres pantallas de Expo contra la API real, sin datos de sustitución ni valores inventados, y se amplió el backend solo donde faltaba información real.
+
+### Inventario local (`frontend/src/screens/ProductsScreen.tsx`)
+
+La pantalla replica la maqueta: tabla en escritorio (Producto, Categoría, Precio de venta, Stock actual, Estado del stock, Reabastecer) y tarjetas equivalentes en móvil, con buscador, selector de sucursal y un resumen con productos activos, productos con stock bajo y sucursal seleccionada. Se conservan las operaciones reales: alta y edición con `POST /api/productos` y `PUT /api/productos/:id`, baja lógica con confirmación y la acción rápida **+10 Unid.**, que recalcula el stock con la misma validación del backend. El rol cajero ve el módulo en solo lectura.
+
+### Sucursales cadena (`frontend/src/screens/BranchesScreen.tsx`)
+
+Cada sucursal se presenta como una tarjeta con nombre, badge ACTIVA, dirección, teléfono, **Mesas Activas x/y** e **Ingresos Hoy**, igual que en la maqueta, más los botones **Administrar esta Sucursal** (abre el dashboard con esa sucursal), **Editar datos** y **Desactivar** con confirmación. El alta se hace en un modal con nombre, dirección y teléfono.
+
+Para no inventar cifras, el backend calculó las tres métricas en la misma consulta: `backend/src/models/sucursalModel.js` resuelve ahora `mesas_total`, `mesas_ocupadas` e `ingresos_hoy` (ventas de productos más sesiones finalizadas del día) con `LEFT JOIN LATERAL`, evitando una llamada al dashboard por cada sucursal. El cambio es aditivo: `GET /api/sucursales` conserva sus campos anteriores y no afecta a `BranchPicker`, al dashboard ni al POS.
+
+### Usuarios y roles (`frontend/src/screens/UsersScreen.tsx`)
+
+La pantalla reproduce los tres indicadores de la maqueta (Usuarios Activos, Admins de Sucursal, Cajeros / Operadores), la barra de filtros (búsqueda, rol y sucursal) y la tabla Usuario / Rol / Sucursal / Credencial / Estado / Acciones, con alta y edición en modal, activación o desactivación con un clic sobre el estado y baja con confirmación.
+
+Decisiones tomadas en esta parte:
+
+- **Credencial en lugar de PIN.** La maqueta muestra una columna “PIN Acceso” de 4 dígitos, pero el esquema `usuarios` no tiene ninguna columna PIN. Se optó por mostrar la credencial real (`@nombre` de usuario para el personal de sucursal, correo para el administrador general) en lugar de simular un PIN.
+- **Sin credenciales falsas.** Al editar, el identificador enviado depende del rol: el administrador general se identifica con correo y `username: null`; el personal de sucursal, con nombre de usuario. La contraseña solo viaja cuando se escribe una nueva y el correo previo del personal de sucursal se conserva en lugar de sobrescribirlo con `null`.
+- **Protección de la cuenta propia.** El administrador no puede desactivar, editar ni dar de baja su propia cuenta; el intento se informa en pantalla en lugar de ejecutarse contra el backend.
+- **Listado con inactivas.** `GET /api/usuarios` excluye inactivos por defecto, así que se añadió `?inactivas=true` (`backend/src/models/usuarioModel.js` y `backend/src/controllers/usuarioController.js`) para que la tabla muestre el estado real de cada cuenta y los indicadores se calculen sobre toda la cadena. El filtro por rol y por sucursal se aplica en el cliente.
+
+### Navegación entre sucursales
+
+`frontend/App.tsx` conserva la sucursal elegida desde “Sucursales cadena” en el estado `dashboardBranchId` y la entrega al dashboard con la nueva prop `initialBranchId` de `DashboardScreen`; al entrar al dashboard desde el menú ese valor se limpia. Los demás módulos (POS, reservas, historial, caja, reportes y mesas) no cambian de comportamiento.
+
+### Ajustes de conexión e impresión del mismo ciclo
+
+`frontend/src/services/api.ts` resuelve la URL de la API en tiempo de ejecución con `expo-constants`: descarta las URLs de loopback cuando la app corre en Android y usa la IP del host de Metro con el puerto 3000, de modo que el teléfono ya no apunta a sí mismo. El login muestra la URL del servidor en modo `__DEV__` y la añade al mensaje de error de red para diagnosticar la conexión. En el historial, la impresión del comprobante abre la ventana con un retardo corto y el marcado ya inyectado, evitando la hoja en blanco.
+
+### Verificación
+
+- `npm run check`: 30 pruebas del backend aprobadas y typecheck del frontend sin errores.
+- Consulta de solo lectura a la base configurada: `GET /api/sucursales` devolvió `mesas_total=4`, `mesas_ocupadas=0` e `ingresos_hoy=24.00`; `GET /api/usuarios?inactivas=true` devolvió 4 cuentas reales (un administrador general, un administrador de sucursal y dos cajeros).
+- No se escribieron datos de negocio: la verificación se hizo con consultas de lectura y el script temporal usado para comprobarlas se eliminó.
+
+**Pendiente:** recorrido visual autenticado en navegador y en Android de las tres pantallas (el navegador del entorno de trabajo no estuvo disponible durante esta continuación) y validación de los diálogos en un dispositivo nativo.
+
+## Continuación 2026-11-12 — Configuración de la aplicación
+
+El estudiante pidió desarrollar la parte de configuración con la apariencia de la maqueta `DATA TO BUILD/index.html`, que en este caso es un panel lateral de ajustes (“Configuración App”) y no una sección del menú principal. Como en los módulos anteriores, la maqueta solo sirve de referencia visual: todo lo que se guarda es real y persiste en la base de datos.
+
+### Qué se desarrolló
+
+`frontend/src/screens/SettingsScreen.tsx` reproduce el panel de la maqueta con las mismas secciones y controles:
+
+- **Apariencia / Tema**: botones “Oscuro Lounge” y “Claro Ejecutivo”.
+- **Idioma de Interfaz**: español o inglés.
+- **Moneda del Sistema**: bolivianos, dólares o euros.
+- **Facturación y Ticket PDF**: nombre comercial del ticket, IVA/impuesto y formato de impresión (ticket 80mm u hoja A4).
+- Botón **Guardar y Aplicar Cambios**.
+
+En la barra lateral se añadió el botón **Configuración App** con la píldora de idioma y moneda (`ES • Bs.`), igual que en la maqueta, y el pie conserva la pila técnica y el indicador de sesión.
+
+### Decisiones tomadas
+
+- **Persistencia real en la base de datos.** Se creó la tabla `configuraciones_usuario` (`backend/database/schema.sql` y la migración idempotente `backend/database/migrations/add_user_settings.sql`), con un registro por cuenta: tema, idioma, moneda, nombre comercial, IVA declarado y formato de impresión. La API `GET|PUT /api/configuraciones` solo opera sobre la cuenta autenticada y `PUT` acepta actualizaciones parciales. La migración se aplicó en la base configurada.
+- **Solo se habilita lo que el cliente soporta.** El tema, el idioma y la moneda se guardan, pero únicamente están seleccionables el tema oscuro, el español y los bolivianos. El tema claro, el inglés y las otras monedas aparecen desactivados con su explicación: el cliente Expo se entrega con el tema oscuro existente, no hay traducción al inglés y no hay tasa de cambio configurada, así que no se habilitan opciones que luego no harían nada ni se inventan datos.
+- **El IVA queda declarado, no calculado.** El valor se guarda como parámetro del salón y se indica en pantalla que el sistema no recalcula impuestos sobre los precios del catálogo, en coherencia con lo que ya 기록 el README sobre reportes y arqueo.
+- **Nombre comercial y formato sí tienen efecto.** El comprobante que se imprime desde el historial usa el nombre comercial configurado como encabezado y arma la hoja en 80mm o A4 según el formato guardado.
+
+### Verificación
+
+- `npm run check`: 31 pruebas del backend aprobadas (se añadió una prueba de `validateSettings`) y typecheck del frontend sin errores.
+- `npx expo export --platform web` compiló el bundle con 2306 módulos.
+- Prueba HTTP contra la base real con un token de verificación: `GET` devolvió los valores por defecto (200), `PUT` guardó y devolvió 200, el `GET` posterior devolvió lo guardado, un `PUT` parcial solo cambió el formato de impresión, un `PUT` inválido respondió 400 `VALIDATION_ERROR` y la petición sin token respondió 401. La fila de prueba se eliminó al terminar.
+- El backend en ejecución ya expone `GET /api/configuraciones` y responde 401 sin token.
+
+**Pendiente:** recorrido visual autenticado en navegador y en Android del panel y de sus diálogos (el navegador del entorno de trabajo no estuvo disponible durante esta continuación) y validación en un dispositivo nativo.

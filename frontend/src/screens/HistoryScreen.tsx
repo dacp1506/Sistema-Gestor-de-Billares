@@ -25,6 +25,7 @@ import type { AuthUser } from '../services/auth';
 import { listBranches } from '../services/products';
 import type { Branch } from '../services/products';
 import { listSales, type Sale } from '../services/sales';
+import { getSettings, type UserSettings } from '../services/settings';
 import { colors, shadows } from '../theme';
 
 type DateFilter = 'today' | 'yesterday' | 'all';
@@ -59,7 +60,20 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [printError, setPrintError] = useState<string | null>(null);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
   useAccessibleModal(Boolean(selectedSale), () => setSelectedSale(null));
+
+  useEffect(() => {
+    let active = true;
+    void getSettings()
+      .then((result) => {
+        if (active) setSettings(result);
+      })
+      .catch(() => {
+        if (active) setSettings(null);
+      });
+    return () => { active = false; };
+  }, []);
 
   const loadHistory = useCallback(async () => {
     setLoading(true);
@@ -112,6 +126,13 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
     }
     setPrintError(null);
 
+    const isA4 = settings?.formato_impresion === 'A4';
+    const commercialName = settings?.nombre_comercial?.trim() || 'BOLA8';
+    const pageSize = isA4 ? 'A4' : '80mm auto';
+    const pageMargin = isA4 ? '14mm' : '6mm';
+    const bodyWidth = isA4 ? '720px' : '360px';
+    const bodyFontSize = isA4 ? '13px' : '14px';
+
     const itemsHtml = (selectedSale.detalles || []).map((item) => `
       <tr>
         <td>${escapeHtml(item.nombre || `Producto ${item.id_producto}`)}</td>
@@ -136,9 +157,9 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
     printWindow.document.write(`<!doctype html>
       <html lang="es"><head><meta charset="utf-8"><title>Recibo #${escapeHtml(selectedSale.id_venta)}</title>
       <style>
-        @page { size: 80mm auto; margin: 6mm; }
+        @page { size: ${pageSize}; margin: ${pageMargin}; }
         @media print {
-          body { margin: 0; padding: 20px; font-family: Arial, sans-serif; color: #0f172a; }
+          body { margin: 0; padding: ${isA4 ? '24px' : '20px'}; font-family: Arial, sans-serif; color: #0f172a; }
           .no-print { display: none; }
           .page { margin-bottom: 40px; border-bottom: 1px solid #cbd5e1; padding-bottom: 20px; }
           h1, p { text-align: center; }
@@ -150,7 +171,7 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
           .brand { color: #10b981; font-weight: 900; font-size: 18px; }
           .receipt-footer { margin-top: 30px; border-top: 1px solid #cbd5e1; padding-top: 20px; }
         }
-        body { font: 14px Arial, sans-serif; max-width: 360px; margin: 24px auto; color: #111; }
+        body { font: ${bodyFontSize} Arial, sans-serif; max-width: ${bodyWidth}; margin: 24px auto; color: #111; }
         h1, p { text-align: center; margin: 6px 0; }
         h1 { font-size: 20px; }
         .muted { color: #555; font-size: 12px; }
@@ -165,11 +186,11 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
         .concept { color: #64748b; font-size: 11; margin-top: 2; }
         .method { color: #64748b; font-size: 11; margin-top: 2; }
       </style></head><body>
-        <div class="logo"><div class="brand">BOLA8</div><div class="concept">Comprobante de Venta ‒ Bola8</div></div>
+        <div class="logo"><div class="brand">${escapeHtml(commercialName)}</div><div class="concept">Comprobante de Venta ‒ Bola8</div></div>
         <div class="rule"></div>
         <p>Recibo #${escapeHtml(selectedSale.id_venta)}</p>
         <p class="muted">${escapeHtml(timestamp)}</p>
-        <p class="muted">${escapeHtml(selectedSale.nombre_sucursal || 'Sucursal')} · ${selectedSale.tipo_venta === 'mesa' ? 'Consumo de mesa' : 'Venta directa POS'}
+        <p class="muted">${escapeHtml(selectedSale.nombre_sucursal || 'Sucursal')} · ${selectedSale.tipo_venta === 'mesa' ? 'Consumo de mesa' : 'Venta directa POS'}</p>
         ${tableSale ? `<p class="muted">${escapeHtml(tableLabel)} · ${minutes} min × Bs. ${rate.toFixed(2)} = Bs. ${rental.toFixed(2)}</p>` : ''}
         <p class="muted">Cajero: ${escapeHtml(selectedSale.nombre_usuario || 'Operador')}</p>
         <div class="rule" style="margin:20px 0;"></div>
@@ -189,14 +210,18 @@ export default function HistoryScreen({ user }: { user: AuthUser }) {
         <div class="rule" style="margin:20px 0;"></div>
         ${tableSale ? `<p style="text-align:right; font-size:12px; color:#334155; margin:2px 0;">Productos: Bs. ${products.toFixed(2)}</p>` : ''}
         <p style="text-align:right; font-size:18px; font-weight:bold; color:#0f172a;">Total: Bs. ${grandTotal.toFixed(2)}</p>
-        <p class="muted" style="font-size:11px; color:#64748b;">Pago: ${escapeHtml('Efectivo / QR')}
+        <p class="muted" style="font-size:11px; color:#64748b;">Pago: ${escapeHtml('Efectivo / QR')}</p>
         <div class="receipt-footer" style="margin-top:30px; border-top:1px solid #cbd5e1; padding-top:20px;">
           <p class="muted" style="font-size:11px; color:#64748b;">¡Gracias por jugar en Bola8!</p>
         </div>
       </body></html>`);
     printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    // Wait for the new document to finish layout before opening the print
+    // dialog; printing immediately can produce a blank page in some browsers.
+    printWindow.setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 350);
   };
 
   const visibleSalesCount = visibleSales.length;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -9,6 +9,7 @@ import {
   Menu,
   Package,
   ReceiptText,
+  Settings,
   ShoppingCart,
   Sliders,
   Wallet,
@@ -28,13 +29,15 @@ import ReservationsScreen from './src/screens/ReservationsScreen';
 import ArqueoScreen from './src/screens/ArqueoScreen';
 import TablesScreen from './src/screens/TablesScreen';
 import UsersScreen from './src/screens/UsersScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import { useAccessibleModal } from './src/hooks/useAccessibleModal';
 import { setAccessToken } from './src/services/api';
 import type { AuthUser } from './src/services/auth';
 import { clearPosCarts } from './src/services/posCart';
+import { getSettings, settingsPill, type UserSettings } from './src/services/settings';
 import { colors } from './src/theme';
 
-type ScreenKey = 'dashboard' | 'pos' | 'productos' | 'mesas' | 'caja' | 'reservas' | 'historial' | 'reportes' | 'sucursales' | 'usuarios';
+type ScreenKey = 'dashboard' | 'pos' | 'productos' | 'mesas' | 'caja' | 'reservas' | 'historial' | 'reportes' | 'sucursales' | 'usuarios' | 'configuracion';
 
 type NavigationItem = {
   key: ScreenKey;
@@ -76,6 +79,7 @@ const pageDetails: Record<ScreenKey, { title: string; subtitle: string }> = {
   sucursales: { title: 'Sucursales', subtitle: 'Administración de locales de la cadena' },
   productos: { title: 'Inventario local', subtitle: 'Productos, precios y existencias' },
   usuarios: { title: 'Usuarios y roles', subtitle: 'Acceso de operadores del sistema' },
+  configuracion: { title: 'Configuración', subtitle: 'Preferencias de la aplicación y de los comprobantes' },
 };
 
 export default function App() {
@@ -83,9 +87,27 @@ export default function App() {
   const compact = width < 960;
   const [screen, setScreen] = useState<ScreenKey>('dashboard');
   const [posTarget, setPosTarget] = useState<string | undefined>(undefined);
+  const [dashboardBranchId, setDashboardBranchId] = useState<string | undefined>(undefined);
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [settings, setSettings] = useState<UserSettings | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   useAccessibleModal(compact && menuOpen, () => setMenuOpen(false));
+
+  useEffect(() => {
+    if (!user) {
+      setSettings(null);
+      return;
+    }
+    let active = true;
+    void getSettings()
+      .then((result) => {
+        if (active) setSettings(result);
+      })
+      .catch(() => {
+        if (active) setSettings(null);
+      });
+    return () => { active = false; };
+  }, [user?.id_usuario]);
 
   if (!user) {
     return (
@@ -105,11 +127,14 @@ export default function App() {
     setUser(null);
     setScreen('dashboard');
     setPosTarget(undefined);
+    setDashboardBranchId(undefined);
+    setSettings(null);
     setMenuOpen(false);
   };
 
   const selectScreen = (nextScreen: ScreenKey) => {
     if (nextScreen === 'pos') setPosTarget(undefined);
+    if (nextScreen === 'dashboard') setDashboardBranchId(undefined);
     setScreen(nextScreen);
     setMenuOpen(false);
   };
@@ -120,10 +145,16 @@ export default function App() {
     setMenuOpen(false);
   };
 
+  const openBranch = (branchId: string) => {
+    setDashboardBranchId(branchId);
+    setScreen('dashboard');
+    setMenuOpen(false);
+  };
+
   const renderScreen = () => {
     switch (screen) {
       case 'dashboard':
-        return <DashboardScreen user={user} onOpenPos={openPos} />;
+        return <DashboardScreen initialBranchId={dashboardBranchId} user={user} onOpenPos={openPos} />;
       case 'pos':
         return (
           <PosScreen
@@ -145,9 +176,11 @@ export default function App() {
       case 'reportes':
         return <ReportsScreen user={user} />;
       case 'sucursales':
-        return <BranchesScreen />;
+        return <BranchesScreen activeBranchId={dashboardBranchId} onOpenBranch={openBranch} />;
       case 'usuarios':
-        return <UsersScreen />;
+        return <UsersScreen user={user} />;
+      case 'configuracion':
+        return <SettingsScreen settings={settings} onSaved={setSettings} />;
     }
   };
 
@@ -216,9 +249,28 @@ export default function App() {
         })}
       </ScrollView>
 
-      <View style={styles.sidebarFooter}>
-        <View style={styles.connectionDot} />
-        <Text style={styles.footerText}>Sesión autenticada</Text>
+      <View style={styles.sidebarFooterBlock}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => selectScreen('configuracion')}
+          style={({ pressed }) => [styles.configButton, pressed && styles.navItemPressed]}
+        >
+          <View style={styles.configButtonCopy}>
+            <Settings color={colors.accent} size={16} />
+            <Text numberOfLines={1} style={styles.configButtonText}>Configuración App</Text>
+          </View>
+          <View style={styles.configPill}>
+            <Text style={styles.configPillText}>{settingsPill(settings)}</Text>
+          </View>
+        </Pressable>
+
+        <View style={styles.sidebarFooter}>
+          <View style={styles.footerCopy}>
+            <Text style={styles.footerText}>Sesión autenticada</Text>
+            <Text style={styles.footerStack}>React Native · Node · Supabase</Text>
+          </View>
+          <View style={styles.connectionDot} />
+        </View>
       </View>
     </View>
   );
@@ -402,6 +454,42 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: colors.border,
   },
+  sidebarFooterBlock: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    gap: 10,
+  },
+  configButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  configButtonCopy: { flexDirection: 'row', alignItems: 'center', gap: 9, minWidth: 0, flex: 1 },
+  configButtonText: { color: colors.text, fontSize: 11, fontWeight: '800' },
+  configPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: colors.background,
+  },
+  configPillText: {
+    color: colors.accent,
+    fontSize: 9,
+    fontWeight: '800',
+    fontFamily: Platform.select({ web: 'monospace', default: undefined }),
+  },
+  footerCopy: { flex: 1, minWidth: 0 },
+  footerStack: { color: colors.textMuted, fontSize: 9, marginTop: 2 },
   connectionDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
   footerText: { color: colors.textMuted, fontSize: 11 },
   topbar: {

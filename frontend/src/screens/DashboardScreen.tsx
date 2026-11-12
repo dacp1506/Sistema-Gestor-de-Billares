@@ -50,6 +50,7 @@ type Notice = { tone: 'success' | 'error' | 'info'; text: string };
 
 type DashboardScreenProps = {
   user: AuthUser;
+  initialBranchId?: string;
   onOpenPos: (tableId?: string) => void;
 };
 
@@ -82,11 +83,13 @@ function getErrorMessage(error: unknown) {
   return 'No se pudieron cargar los datos del dashboard.';
 }
 
-export default function DashboardScreen({ user, onOpenPos }: DashboardScreenProps) {
+export default function DashboardScreen({ user, initialBranchId, onOpenPos }: DashboardScreenProps) {
   const { width } = useWindowDimensions();
   const compact = width < 720;
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [branchId, setBranchId] = useState(user.rol === 'admin_general' ? '' : String(user.id_sucursal ?? ''));
+  const [branchId, setBranchId] = useState(
+    initialBranchId || (user.rol === 'admin_general' ? '' : String(user.id_sucursal ?? '')),
+  );
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [tables, setTables] = useState<Table[]>([]);
   const [branchLoading, setBranchLoading] = useState(true);
@@ -112,6 +115,9 @@ export default function DashboardScreen({ user, onOpenPos }: DashboardScreenProp
         if (!active) return;
         setBranches(result);
         setBranchId((current) => {
+          if (initialBranchId && result.some((branch) => String(branch.id_sucursal) === initialBranchId)) {
+            return initialBranchId;
+          }
           if (current && result.some((branch) => String(branch.id_sucursal) === current)) return current;
           if (user.rol !== 'admin_general') return String(user.id_sucursal ?? '');
           return String(result[0]?.id_sucursal || '');
@@ -125,7 +131,7 @@ export default function DashboardScreen({ user, onOpenPos }: DashboardScreenProp
         if (active) setBranchLoading(false);
       });
     return () => { active = false; };
-  }, [user.id_sucursal, user.rol]);
+  }, [initialBranchId, user.id_sucursal, user.rol]);
 
   useEffect(() => {
     if (!branchId) {

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
+  RefreshControl,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -11,7 +14,17 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { Building2, MapPin, Pencil, Phone, Plus, X } from 'lucide-react-native';
+import {
+  Building2,
+  CheckCircle2,
+  LayoutDashboard,
+  MapPin,
+  Pencil,
+  Phone,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react-native';
 import { useAccessibleModal } from '../hooks/useAccessibleModal';
 import { ApiError } from '../services/api';
 import {
@@ -27,11 +40,34 @@ import { colors, shadows } from '../theme';
 type BranchForm = { nombre: string; direccion: string; telefono: string };
 type Notice = { kind: 'success' | 'error'; text: string } | null;
 
+type BranchesScreenProps = {
+  activeBranchId?: string;
+  onOpenBranch?: (branchId: string) => void;
+};
+
 const emptyForm = (): BranchForm => ({ nombre: '', direccion: '', telefono: '' });
 
-export default function BranchesScreen() {
+function money(value: number | string | undefined) {
+  return `Bs. ${Number(value || 0).toLocaleString('es-BO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === 'NETWORK_ERROR' || error.code === 'NETWORK_TIMEOUT') {
+      return `${error.message} Si ejecutas la app en un teléfono, configura EXPO_PUBLIC_API_URL con la IP local de tu computadora.`;
+    }
+    return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return 'No se pudo completar la operación con las sucursales.';
+}
+
+export default function BranchesScreen({ activeBranchId, onOpenBranch }: BranchesScreenProps) {
   const { width } = useWindowDimensions();
-  const compact = width < 720;
+  const compact = width < 860;
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -52,9 +88,7 @@ export default function BranchesScreen() {
     try {
       setBranches(await listBranches());
     } catch (loadError) {
-      setError(loadError instanceof ApiError || loadError instanceof Error
-        ? loadError.message
-        : 'No se pudieron cargar las sucursales.');
+      setError(getErrorMessage(loadError));
       setBranches([]);
     } finally {
       setLoading(false);
@@ -107,17 +141,15 @@ export default function BranchesScreen() {
     try {
       if (editingBranch) {
         await updateBranch(editingBranch.id_sucursal, input);
-        setNotice({ kind: 'success', text: `Sucursal “${nombre}” actualizada.` });
+        setNotice({ kind: 'success', text: `Sucursal “${nombre}” actualizada correctamente.` });
       } else {
         await createBranch(input);
-        setNotice({ kind: 'success', text: `Sucursal “${nombre}” registrada.` });
+        setNotice({ kind: 'success', text: `Sucursal “${nombre}” registrada en la cadena Bola8.` });
       }
       setFormVisible(false);
       await loadBranches();
     } catch (saveError) {
-      setFormError(saveError instanceof ApiError || saveError instanceof Error
-        ? saveError.message
-        : 'No se pudo guardar la sucursal.');
+      setFormError(getErrorMessage(saveError));
     } finally {
       setSaving(false);
     }
@@ -126,102 +158,201 @@ export default function BranchesScreen() {
   const confirmDeactivate = async () => {
     if (!branchToDeactivate) return;
     setDeactivating(true);
-    setError(null);
+    setNotice(null);
     try {
       await deactivateBranch(branchToDeactivate.id_sucursal);
-      setNotice({ kind: 'success', text: `Sucursal “${branchToDeactivate.nombre}” desactivada.` });
+      setNotice({ kind: 'success', text: `Sucursal “${branchToDeactivate.nombre}” desactivada. Sus registros históricos se conservan.` });
       setBranchToDeactivate(null);
       await loadBranches();
     } catch (deactivateError) {
-      setError(deactivateError instanceof ApiError || deactivateError instanceof Error
-        ? deactivateError.message
-        : 'No se pudo desactivar la sucursal.');
+      setNotice({ kind: 'error', text: getErrorMessage(deactivateError) });
       setBranchToDeactivate(null);
     } finally {
       setDeactivating(false);
     }
   };
 
+  const openBranch = (branch: Branch) => {
+    if (!onOpenBranch) return;
+    onOpenBranch(String(branch.id_sucursal));
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView contentContainerStyle={[styles.content, compact && styles.contentCompact]}>
-        <View style={[styles.header, compact && styles.headerCompact]}>
-          <View style={styles.heading}>
-            <Text style={styles.eyebrow}>ADMINISTRACIÓN · CADENA</Text>
-            <Text style={styles.title}>Sucursales</Text>
-            <Text style={styles.subtitle}>Administra los locales y sus datos de contacto.</Text>
+      <ScrollView
+        contentContainerStyle={[styles.content, compact && styles.contentCompact]}
+        refreshControl={(
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => { void loadBranches(); }}
+            tintColor={colors.accent}
+          />
+        )}
+      >
+        <View style={[styles.headerCard, shadows]}>
+          <View style={[styles.headerTop, compact && styles.headerTopCompact]}>
+            <View style={styles.headingCopy}>
+              <Text style={styles.eyebrow}>ADMINISTRACIÓN · CADENA</Text>
+              <Text style={styles.title}>Gestión Multi-Sucursal Cadena Bola8</Text>
+              <Text style={styles.subtitle}>
+                Administración centralizada de locales, capacidad de mesas e ingresos consolidados.
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              onPress={openCreate}
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+            >
+              <Plus color={colors.background} size={16} strokeWidth={3} />
+              <Text style={styles.primaryText}>Registrar Nueva Sucursal</Text>
+            </Pressable>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={openCreate}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
-          >
-            <Plus color="#04130d" size={17} />
-            <Text style={styles.primaryText}>Nueva sucursal</Text>
-          </Pressable>
         </View>
 
         {notice ? (
-          <View style={[styles.notice, notice.kind === 'success' ? styles.noticeSuccess : styles.noticeError]}>
-            <Text style={styles.noticeText}>{notice.text}</Text>
-            <Pressable accessibilityLabel="Descartar aviso" accessibilityRole="button" onPress={() => setNotice(null)}>
-              <X color={notice.kind === 'success' ? colors.accent : colors.danger} size={16} />
-            </Pressable>
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Descartar mensaje"
+            onPress={() => setNotice(null)}
+            style={[styles.notice, notice.kind === 'error' ? styles.noticeError : styles.noticeSuccess]}
+          >
+            <Text style={[styles.noticeText, notice.kind === 'error' ? styles.noticeErrorText : styles.noticeSuccessText]}>
+              {notice.text}
+            </Text>
+            <Text style={styles.noticeDismiss}>×</Text>
+          </Pressable>
         ) : null}
 
         {loading ? (
-          <View style={styles.status}><ActivityIndicator color={colors.accent} /><Text style={styles.statusText}>Cargando sucursales…</Text></View>
+          <View style={[styles.statusCard, shadows]}>
+            <ActivityIndicator color={colors.accent} />
+            <Text style={styles.statusText}>Cargando sucursales de la cadena…</Text>
+          </View>
         ) : error ? (
-          <View style={[styles.status, styles.errorCard]}>
-            <Text style={styles.errorTitle}>No se pudieron cargar las sucursales</Text>
-            <Text style={styles.statusText}>{error}</Text>
-            <Pressable accessibilityRole="button" onPress={() => { void loadBranches(); }} style={styles.retryButton}>
-              <Text style={styles.retryText}>Reintentar</Text>
+          <View style={[styles.statusCard, styles.statusError, shadows]}>
+            <RefreshCw color={colors.danger} size={20} />
+            <View style={styles.statusCopy}>
+              <Text style={styles.statusTitle}>No se pudieron cargar las sucursales</Text>
+              <Text style={styles.statusMessage}>{error}</Text>
+            </View>
+            <Pressable accessibilityRole="button" onPress={() => { void loadBranches(); }} style={styles.statusAction}>
+              <Text style={styles.statusActionText}>Reintentar</Text>
             </Pressable>
           </View>
         ) : branches.length === 0 ? (
-          <View style={styles.status}>
-            <Building2 color={colors.textMuted} size={28} />
-            <Text style={styles.statusText}>Todavía no hay sucursales activas.</Text>
+          <View style={[styles.statusCard, shadows]}>
+            <Building2 color={colors.textMuted} size={30} />
+            <View style={styles.statusCopy}>
+              <Text style={styles.statusTitle}>Todavía no hay sucursales activas</Text>
+              <Text style={styles.statusMessage}>
+                Registra la primera sucursal para comenzar a operar la cadena.
+              </Text>
+            </View>
+            <Pressable accessibilityRole="button" onPress={openCreate} style={styles.statusAction}>
+              <Text style={styles.statusActionText}>Registrar sucursal</Text>
+            </Pressable>
           </View>
         ) : (
           <>
-            <View style={styles.summary}>
-              <Text style={styles.summaryLabel}>LOCALES ACTIVOS</Text>
-              <Text style={styles.summaryValue}>{branches.length}</Text>
-            </View>
-            <View style={[styles.branchGrid, compact && styles.branchGridCompact]}>
-              {branches.map((branch) => (
-                <View key={String(branch.id_sucursal)} style={styles.branchCard}>
-                  <View style={styles.cardHeader}>
-                    <View style={styles.branchIcon}><Building2 color={colors.accent} size={19} /></View>
-                    <View style={styles.branchIdentity}>
-                      <Text numberOfLines={2} style={styles.branchName}>{branch.nombre}</Text>
-                      <Text style={styles.branchId}>Sucursal #{branch.id_sucursal}</Text>
+            <View style={styles.grid}>
+              {branches.map((branch) => {
+                const selected = String(branch.id_sucursal) === String(activeBranchId || '');
+                return (
+                  <View
+                    key={String(branch.id_sucursal)}
+                    style={[
+                      styles.branchCard,
+                      shadows,
+                      selected && styles.branchCardSelected,
+                      compact && styles.branchCardCompact,
+                    ]}
+                  >
+                    <View>
+                      <View style={styles.cardHeader}>
+                        <Text numberOfLines={2} style={styles.branchName}>{branch.nombre}</Text>
+                        <View style={styles.activeBadge}>
+                          <Text style={styles.activeText}>ACTIVA</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.contactRow}>
+                        <MapPin color={colors.textMuted} size={14} />
+                        <Text numberOfLines={2} style={styles.contactText}>
+                          {branch.direccion || 'Dirección no registrada'}
+                        </Text>
+                      </View>
+                      <View style={styles.contactRow}>
+                        <Phone color={colors.textMuted} size={14} />
+                        <Text numberOfLines={1} style={styles.contactText}>
+                          {branch.telefono || 'Teléfono no registrado'}
+                        </Text>
+                      </View>
+
+                      <View style={styles.statsBox}>
+                        <View style={styles.statCell}>
+                          <Text style={styles.statLabel}>Mesas Activas</Text>
+                          <Text style={styles.statValue}>
+                            {Number(branch.mesas_ocupadas || 0)} / {Number(branch.mesas_total || 0)}
+                          </Text>
+                        </View>
+                        <View style={styles.statDivider} />
+                        <View style={styles.statCell}>
+                          <Text style={styles.statLabel}>Ingresos Hoy</Text>
+                          <Text style={[styles.statValue, styles.statIncome]}>{money(branch.ingresos_hoy)}</Text>
+                        </View>
+                      </View>
                     </View>
-                    <View style={styles.activeBadge}><Text style={styles.activeText}>ACTIVA</Text></View>
+
+                    <View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={selected ? `${branch.nombre} es la sucursal seleccionada` : `Administrar ${branch.nombre}`}
+                        disabled={!onOpenBranch}
+                        onPress={() => openBranch(branch)}
+                        style={({ pressed }) => [
+                          styles.openButton,
+                          selected ? styles.openButtonSelected : styles.openButtonDefault,
+                          pressed && styles.pressed,
+                          !onOpenBranch && styles.disabled,
+                        ]}
+                      >
+                        {selected
+                          ? <CheckCircle2 color={colors.accent} size={15} />
+                          : <LayoutDashboard color={colors.text} size={15} />}
+                        <Text style={[styles.openButtonText, selected && styles.openButtonTextSelected]}>
+                          {selected ? 'Sucursal Seleccionada' : 'Administrar esta Sucursal'}
+                        </Text>
+                      </Pressable>
+
+                      <View style={styles.cardActions}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Editar ${branch.nombre}`}
+                          onPress={() => openEdit(branch)}
+                          style={({ pressed }) => [styles.cardAction, pressed && styles.pressed]}
+                        >
+                          <Pencil color={colors.textMuted} size={13} />
+                          <Text style={styles.cardActionText}>Editar datos</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Desactivar ${branch.nombre}`}
+                          onPress={() => setBranchToDeactivate(branch)}
+                          style={({ pressed }) => [styles.cardAction, styles.cardActionDanger, pressed && styles.pressed]}
+                        >
+                          <Trash2 color={colors.danger} size={13} />
+                          <Text style={[styles.cardActionText, styles.cardActionDangerText]}>Desactivar</Text>
+                        </Pressable>
+                      </View>
+                    </View>
                   </View>
-                  <View style={styles.contactRow}>
-                    <MapPin color={colors.textMuted} size={15} />
-                    <Text style={styles.contactText}>{branch.direccion || 'Dirección no registrada'}</Text>
-                  </View>
-                  <View style={styles.contactRow}>
-                    <Phone color={colors.textMuted} size={15} />
-                    <Text style={styles.contactText}>{branch.telefono || 'Teléfono no registrado'}</Text>
-                  </View>
-                  <View style={styles.cardActions}>
-                    <Pressable accessibilityRole="button" onPress={() => openEdit(branch)} style={styles.editButton}>
-                      <Pencil color={colors.info} size={14} />
-                      <Text style={styles.editText}>Editar datos</Text>
-                    </Pressable>
-                    <Pressable accessibilityRole="button" onPress={() => setBranchToDeactivate(branch)} style={styles.deactivateButton}>
-                      <Text style={styles.deactivateText}>Desactivar</Text>
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
+                );
+              })}
             </View>
+
+            <Text style={styles.footerNote}>
+              {branches.length} {branches.length === 1 ? 'sucursal activa' : 'sucursales activas'} · Las métricas se actualizan desde la base de datos.
+            </Text>
           </>
         )}
       </ScrollView>
@@ -234,59 +365,82 @@ export default function BranchesScreen() {
         transparent
         visible={formVisible}
       >
-        <View style={styles.modalLayer}>
-          <Pressable
-            accessibilityLabel="Cerrar formulario"
-            onPress={() => {
-              if (!saving) setFormVisible(false);
-            }}
-            style={styles.backdrop}
-          />
-          <View accessibilityViewIsModal style={styles.modal}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.modalLayer}
+        >
+          <View accessibilityViewIsModal style={[styles.modal, shadows]}>
             <View style={styles.modalHeader}>
               <View>
                 <Text style={styles.modalEyebrow}>DATOS DEL LOCAL</Text>
-                <Text style={styles.modalTitle}>{editingBranch ? 'Editar sucursal' : 'Nueva sucursal'}</Text>
+                <Text style={styles.modalTitle}>
+                  {editingBranch ? 'Editar Sucursal' : 'Registrar Nueva Sucursal Bola8'}
+                </Text>
               </View>
-              <Pressable accessibilityLabel="Cerrar" accessibilityRole="button" disabled={saving} onPress={() => setFormVisible(false)} style={styles.closeButton}>
-                <X color={colors.textMuted} size={19} />
+              <Pressable
+                accessibilityLabel="Cerrar"
+                accessibilityRole="button"
+                disabled={saving}
+                onPress={() => setFormVisible(false)}
+                style={styles.closeButton}
+              >
+                <Text style={styles.closeText}>×</Text>
               </Pressable>
             </View>
-            <ScrollView style={styles.formBody}>
+
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.formBody}>
               <FormField
-                label="NOMBRE"
-                placeholder="Ej. Bola8 Centro"
+                label="Nombre de la Sucursal *"
+                placeholder="Ej. Sucursal Quillacollo"
                 value={form.nombre}
                 onChangeText={(nombre) => setForm((current) => ({ ...current, nombre }))}
                 maxLength={100}
               />
               <FormField
-                label="DIRECCIÓN"
-                placeholder="Dirección del local"
+                label="Dirección Física"
+                placeholder="Ej. Av. Blanco Galindo Km 12"
                 value={form.direccion}
                 onChangeText={(direccion) => setForm((current) => ({ ...current, direccion }))}
                 maxLength={255}
               />
               <FormField
-                label="TELÉFONO"
-                placeholder="Teléfono de contacto"
+                label="Teléfono de Contacto"
+                placeholder="Ej. 4-4321987"
                 value={form.telefono}
                 onChangeText={(telefono) => setForm((current) => ({ ...current, telefono }))}
                 keyboardType="phone-pad"
                 maxLength={30}
               />
-              {formError ? <Text accessibilityRole="alert" style={styles.formError}>{formError}</Text> : null}
+              <Text style={styles.hint}>Los campos con * son obligatorios.</Text>
+              {formError ? (
+                <View accessibilityRole="alert" style={styles.errorBox}>
+                  <Text style={styles.errorText}>{formError}</Text>
+                </View>
+              ) : null}
             </ScrollView>
+
             <View style={styles.modalActions}>
-              <Pressable accessibilityRole="button" disabled={saving} onPress={() => setFormVisible(false)} style={styles.cancelButton}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={saving}
+                onPress={() => setFormVisible(false)}
+                style={styles.cancelButton}
+              >
                 <Text style={styles.cancelText}>Cancelar</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" disabled={saving} onPress={() => { void saveBranch(); }} style={[styles.primaryButton, saving && styles.disabled]}>
-                {saving ? <ActivityIndicator color="#04130d" size="small" /> : <Text style={styles.primaryText}>{editingBranch ? 'Guardar cambios' : 'Registrar'}</Text>}
+              <Pressable
+                accessibilityRole="button"
+                disabled={saving}
+                onPress={() => { void saveBranch(); }}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, saving && styles.disabled]}
+              >
+                {saving
+                  ? <ActivityIndicator color={colors.background} size="small" />
+                  : <Text style={styles.primaryText}>{editingBranch ? 'Guardar cambios' : 'Crear Sucursal'}</Text>}
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -297,32 +451,37 @@ export default function BranchesScreen() {
         transparent
         visible={Boolean(branchToDeactivate)}
       >
-        {branchToDeactivate ? (
-          <View style={styles.modalLayer}>
-            <Pressable
-              accessibilityLabel="Cancelar desactivación"
-              onPress={() => {
-                if (!deactivating) setBranchToDeactivate(null);
-              }}
-              style={styles.backdrop}
-            />
-            <View accessibilityViewIsModal style={styles.confirmModal}>
-              <Text style={styles.modalEyebrow}>CONFIRMAR ACCIÓN</Text>
-              <Text style={styles.modalTitle}>Desactivar sucursal</Text>
-              <Text style={styles.confirmMessage}>
-                ¿Desactivar “{branchToDeactivate.nombre}”? Se conservarán sus registros históricos.
-              </Text>
-              <View style={styles.modalActions}>
-                <Pressable accessibilityRole="button" disabled={deactivating} onPress={() => setBranchToDeactivate(null)} style={styles.cancelButton}>
-                  <Text style={styles.cancelText}>Cancelar</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" disabled={deactivating} onPress={() => { void confirmDeactivate(); }} style={[styles.dangerButton, deactivating && styles.disabled]}>
-                  {deactivating ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.dangerText}>Desactivar</Text>}
-                </Pressable>
-              </View>
+        <View style={styles.modalLayer}>
+          <View accessibilityRole="alert" style={[styles.confirmModal, shadows]}>
+            <Text style={styles.modalEyebrow}>CONFIRMAR ACCIÓN</Text>
+            <Text style={styles.modalTitle}>Desactivar sucursal</Text>
+            <Text style={styles.confirmMessage}>
+              {branchToDeactivate
+                ? `¿Desactivar “${branchToDeactivate.nombre}”? La sucursal dejará de aparecer en la operación diaria, pero sus registros históricos se conservarán.`
+                : ''}
+            </Text>
+            <View style={styles.modalActions}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={deactivating}
+                onPress={() => setBranchToDeactivate(null)}
+                style={styles.cancelButton}
+              >
+                <Text style={styles.cancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                disabled={deactivating}
+                onPress={() => { void confirmDeactivate(); }}
+                style={({ pressed }) => [styles.dangerButton, pressed && styles.pressed, deactivating && styles.disabled]}
+              >
+                {deactivating
+                  ? <ActivityIndicator color={colors.text} size="small" />
+                  : <Text style={styles.dangerText}>Desactivar</Text>}
+              </Pressable>
             </View>
           </View>
-        ) : null}
+        </View>
       </Modal>
     </SafeAreaView>
   );
@@ -344,10 +503,11 @@ function FormField({
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
-        accessibilityLabel={label.toLocaleLowerCase()}
+        accessibilityLabel={label}
         autoCapitalize="sentences"
         keyboardType={keyboardType}
         placeholderTextColor={colors.textMuted}
+        selectionColor={colors.accent}
         style={styles.input}
         {...props}
       />
@@ -357,65 +517,248 @@ function FormField({
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  content: { padding: 24, gap: 18, width: '100%', maxWidth: 1400, alignSelf: 'center' },
-  contentCompact: { padding: 14, gap: 14 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 15 },
-  headerCompact: { alignItems: 'flex-start', flexDirection: 'column' },
-  heading: { flex: 1 },
-  eyebrow: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 5 },
-  title: { color: colors.text, fontSize: 24, fontWeight: '900' },
-  subtitle: { color: colors.textMuted, fontSize: 12, marginTop: 5, lineHeight: 18 },
-  primaryButton: { minHeight: 42, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14, borderRadius: 9, backgroundColor: colors.accent },
-  primaryText: { color: '#04130d', fontSize: 12, fontWeight: '900' },
-  pressed: { opacity: 0.78 },
-  disabled: { opacity: 0.56 },
-  notice: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: 12, borderRadius: 10, borderWidth: 1 },
+  content: {
+    width: '100%',
+    maxWidth: 1280,
+    alignSelf: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  contentCompact: { padding: 14, gap: 13 },
+
+  headerCard: {
+    padding: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    gap: 16,
+  },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  headerTopCompact: { flexDirection: 'column', alignItems: 'stretch' },
+  headingCopy: { flex: 1, minWidth: 0 },
+  eyebrow: { color: colors.accent, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  title: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 5 },
+  subtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  primaryButton: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 15,
+    borderRadius: 11,
+    backgroundColor: colors.accent,
+  },
+  primaryText: { color: colors.background, fontSize: 12, fontWeight: '900' },
+  pressed: { opacity: 0.8 },
+  disabled: { opacity: 0.55 },
+
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderRadius: 11,
+    borderWidth: 1,
+  },
   noticeSuccess: { backgroundColor: colors.accentSoft, borderColor: 'rgba(16, 185, 129, 0.3)' },
-  noticeError: { backgroundColor: colors.dangerSoft, borderColor: 'rgba(251, 113, 133, 0.35)' },
-  noticeText: { flex: 1, color: colors.text, fontSize: 12, fontWeight: '600' },
-  status: { minHeight: 180, alignItems: 'center', justifyContent: 'center', padding: 22, gap: 11, backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
-  statusText: { color: colors.textMuted, textAlign: 'center', fontSize: 12, lineHeight: 18 },
-  errorCard: { borderColor: 'rgba(251, 113, 133, 0.35)' },
-  errorTitle: { color: colors.danger, fontSize: 14, fontWeight: '800', textAlign: 'center' },
-  retryButton: { paddingVertical: 8, paddingHorizontal: 13, borderRadius: 8, backgroundColor: colors.accentSoft },
-  retryText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
-  summary: { minHeight: 70, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  summaryLabel: { color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.7 },
-  summaryValue: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 3 },
-  branchGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
-  branchGridCompact: { flexDirection: 'column' },
-  branchCard: { flexGrow: 1, flexBasis: 340, minWidth: 0, padding: 17, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, ...(shadows || {}) },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  branchIcon: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: colors.accentSoft },
-  branchIdentity: { flex: 1, minWidth: 0 },
-  branchName: { color: colors.text, fontSize: 14, fontWeight: '800' },
-  branchId: { color: colors.textMuted, fontSize: 10, marginTop: 4 },
-  activeBadge: { paddingVertical: 5, paddingHorizontal: 8, borderRadius: 20, backgroundColor: colors.accentSoft },
-  activeText: { color: colors.accent, fontSize: 9, fontWeight: '900' },
-  contactRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 10 },
-  contactText: { flex: 1, color: colors.textMuted, fontSize: 11, lineHeight: 17 },
-  cardActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 7, paddingTop: 13, borderTopWidth: 1, borderColor: colors.border },
-  editButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 7 },
-  editText: { color: colors.info, fontSize: 11, fontWeight: '800' },
-  deactivateButton: { paddingVertical: 7, paddingHorizontal: 9, borderRadius: 8, backgroundColor: colors.dangerSoft },
-  deactivateText: { color: colors.danger, fontSize: 10, fontWeight: '800' },
-  modalLayer: { flex: 1, padding: 18, alignItems: 'center', justifyContent: 'center' },
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(2, 6, 23, 0.78)' },
-  modal: { width: '100%', maxWidth: 520, maxHeight: '90%', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, ...(shadows || {}) },
-  confirmModal: { width: '100%', maxWidth: 420, padding: 20, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, ...(shadows || {}) },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 14, borderBottomWidth: 1, borderColor: colors.border },
-  modalEyebrow: { color: colors.accent, fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },
-  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '900', marginTop: 4 },
-  closeButton: { width: 34, height: 34, justifyContent: 'center', alignItems: 'center', borderRadius: 8, backgroundColor: colors.surfaceRaised },
-  formBody: { flexGrow: 0 },
-  field: { marginTop: 15 },
-  fieldLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 7 },
-  input: { minHeight: 44, paddingHorizontal: 12, borderRadius: 9, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceRaised, color: colors.text, fontSize: 13 },
-  formError: { color: colors.danger, fontSize: 11, lineHeight: 16, marginTop: 14 },
-  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 9, paddingTop: 14, marginTop: 15, borderTopWidth: 1, borderColor: colors.border },
-  cancelButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 13, borderRadius: 9, borderWidth: 1, borderColor: colors.border },
-  cancelText: { color: colors.textMuted, fontSize: 11, fontWeight: '800' },
-  dangerButton: { minHeight: 40, minWidth: 100, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 13, borderRadius: 9, backgroundColor: colors.danger },
-  dangerText: { color: '#fff', fontSize: 11, fontWeight: '900' },
-  confirmMessage: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 12 },
+  noticeError: { backgroundColor: colors.dangerSoft, borderColor: 'rgba(244, 63, 94, 0.3)' },
+  noticeText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '600' },
+  noticeSuccessText: { color: colors.accent },
+  noticeErrorText: { color: colors.danger },
+  noticeDismiss: { color: colors.textMuted, fontSize: 18, fontWeight: '700' },
+
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  statusError: { borderColor: 'rgba(244, 63, 94, 0.35)', backgroundColor: colors.dangerSoft },
+  statusCopy: { flex: 1, minWidth: 0 },
+  statusTitle: { color: colors.text, fontSize: 13, fontWeight: '800' },
+  statusMessage: { color: colors.textMuted, fontSize: 11, lineHeight: 17, marginTop: 3 },
+  statusText: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
+  statusAction: { paddingHorizontal: 11, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.surfaceRaised },
+  statusActionText: { color: colors.accent, fontSize: 11, fontWeight: '800' },
+
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
+  branchCard: {
+    flexGrow: 1,
+    flexBasis: 330,
+    minWidth: 0,
+    justifyContent: 'space-between',
+    gap: 16,
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  branchCardSelected: { borderColor: 'rgba(16, 185, 129, 0.6)' },
+  branchCardCompact: { flexBasis: '100%' },
+  cardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  branchName: { flex: 1, minWidth: 0, color: colors.text, fontSize: 15, fontWeight: '800', lineHeight: 21 },
+  activeBadge: {
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 999,
+    backgroundColor: colors.accentSoft,
+  },
+  activeText: { color: colors.accent, fontSize: 9, fontWeight: '900', letterSpacing: 0.5 },
+  contactRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginTop: 8 },
+  contactText: { flex: 1, color: colors.textMuted, fontSize: 11, lineHeight: 16 },
+
+  statsBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(2, 6, 23, 0.55)',
+  },
+  statCell: { flex: 1, minWidth: 0 },
+  statDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
+  statLabel: { color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  statValue: { color: colors.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
+  statIncome: { color: colors.accent, fontSize: 13 },
+
+  openButton: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  openButtonDefault: { backgroundColor: colors.surfaceRaised, borderColor: colors.border },
+  openButtonSelected: { backgroundColor: colors.accentSoft, borderColor: 'rgba(16, 185, 129, 0.45)' },
+  openButtonText: { color: colors.text, fontSize: 11, fontWeight: '800' },
+  openButtonTextSelected: { color: colors.accent },
+
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 11,
+    borderTopWidth: 1,
+    borderColor: 'rgba(37, 49, 73, 0.7)',
+  },
+  cardAction: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 4 },
+  cardActionText: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  cardActionDanger: { paddingHorizontal: 8, borderRadius: 7, backgroundColor: colors.dangerSoft },
+  cardActionDangerText: { color: colors.danger },
+
+  footerNote: { color: colors.textMuted, fontSize: 11, textAlign: 'right' },
+
+  modalLayer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    backgroundColor: 'rgba(2, 6, 23, 0.78)',
+  },
+  modal: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '92%',
+    padding: 22,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  confirmModal: {
+    width: '100%',
+    maxWidth: 430,
+    padding: 22,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  modalEyebrow: { color: colors.accent, fontSize: 9, fontWeight: '900', letterSpacing: 1.2 },
+  modalTitle: { color: colors.text, fontSize: 19, fontWeight: '900', marginTop: 5 },
+  closeButton: {
+    width: 34,
+    height: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 9,
+    backgroundColor: colors.surfaceRaised,
+  },
+  closeText: { color: colors.textMuted, fontSize: 22, lineHeight: 24 },
+  formBody: { gap: 13, paddingTop: 14, paddingBottom: 4 },
+  field: { gap: 7 },
+  fieldLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
+  input: {
+    minHeight: 45,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    color: colors.text,
+    fontSize: 13,
+  },
+  hint: { color: colors.textMuted, fontSize: 10, lineHeight: 16 },
+  errorBox: {
+    padding: 11,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(244, 63, 94, 0.3)',
+    backgroundColor: colors.dangerSoft,
+  },
+  errorText: { color: colors.danger, fontSize: 11, lineHeight: 17, fontWeight: '600' },
+  confirmMessage: { color: colors.textMuted, fontSize: 12, lineHeight: 19, marginTop: 12 },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 9,
+    paddingTop: 14,
+    marginTop: 16,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+  },
+  cancelButton: {
+    minHeight: 42,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceRaised,
+  },
+  cancelText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  dangerButton: {
+    minHeight: 42,
+    minWidth: 108,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: colors.danger,
+  },
+  dangerText: { color: colors.background, fontSize: 12, fontWeight: '900' },
 });

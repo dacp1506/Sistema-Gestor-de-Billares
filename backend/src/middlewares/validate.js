@@ -353,6 +353,52 @@ function validateUser(request, response, next) {
   return next();
 }
 
+function validateSettings(request, response, next) {
+  const { tema, idioma, moneda, nombre_comercial, iva_porcentaje, formato_impresion } = request.body || {};
+  const errors = [];
+
+  if (tema !== undefined && !['dark', 'light'].includes(tema)) {
+    errors.push('tema debe ser dark o light.');
+  }
+  if (idioma !== undefined && !['es', 'en'].includes(idioma)) {
+    errors.push('idioma debe ser es o en.');
+  }
+  if (moneda !== undefined && !['BOB', 'USD', 'EUR'].includes(moneda)) {
+    errors.push('moneda debe ser BOB, USD o EUR.');
+  }
+  if (nombre_comercial !== undefined && (
+    typeof nombre_comercial !== 'string'
+    || !nombre_comercial.trim()
+    || nombre_comercial.trim().length > 120
+  )) {
+    errors.push('nombre_comercial es obligatorio y admite hasta 120 caracteres.');
+  }
+  if (iva_porcentaje !== undefined) {
+    const value = Number(iva_porcentaje);
+    if (!Number.isFinite(value) || value < 0 || value > 30) {
+      errors.push('iva_porcentaje debe ser un número entre 0 y 30.');
+    }
+  }
+  if (formato_impresion !== undefined && !['80mm', 'A4'].includes(formato_impresion)) {
+    errors.push('formato_impresion debe ser 80mm o A4.');
+  }
+  if (!Object.keys(request.body || {}).length) {
+    errors.push('Envía al menos un parámetro de configuración.');
+  }
+
+  if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+
+  request.validatedBody = {};
+  if (tema !== undefined) request.validatedBody.tema = tema;
+  if (idioma !== undefined) request.validatedBody.idioma = idioma;
+  if (moneda !== undefined) request.validatedBody.moneda = moneda;
+  if (nombre_comercial !== undefined) request.validatedBody.nombre_comercial = nombre_comercial.trim();
+  if (iva_porcentaje !== undefined) request.validatedBody.iva_porcentaje = Number(iva_porcentaje);
+  if (formato_impresion !== undefined) request.validatedBody.formato_impresion = formato_impresion;
+
+  return next();
+}
+
 module.exports = {
   emailPattern,
   httpError,
@@ -368,5 +414,6 @@ module.exports = {
   validateReservationStatus,
   validateLogin,
   validateRegistration,
-  validateUser
+  validateUser,
+  validateSettings
 };

@@ -1,5 +1,33 @@
-const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
-const apiBaseUrl = (configuredApiUrl || 'http://127.0.0.1:3000/api').replace(/\/+$/, '');
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
+
+const API_PORT = 3000;
+
+function resolveApiBaseUrl(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
+
+  // A configured URL is used as-is, unless it points to loopback (127.0.0.1 /
+  // localhost). On Android that would target the phone itself, so we ignore it
+  // and fall back to auto-detection below.
+  if (configured && !/^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/i.test(configured)) {
+    return configured.replace(/\/+$/, '');
+  }
+
+  // In development, Expo exposes the Metro host (e.g. "192.168.1.103:8081").
+  // The backend runs on the same machine, so reuse that IP with port 3000.
+  const devHostUri = Constants.expoConfig?.hostUri
+    ?? (Constants as unknown as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost;
+  const devHost = devHostUri?.split(':')[0]?.trim();
+  if (devHost && devHost !== 'localhost' && devHost !== '127.0.0.1') {
+    return `http://${devHost}:${API_PORT}/api`;
+  }
+
+  // Android emulator maps the host machine loopback to 10.0.2.2.
+  if (Platform.OS === 'android') return `http://10.0.2.2:${API_PORT}/api`;
+  return `http://127.0.0.1:${API_PORT}/api`;
+}
+
+const apiBaseUrl = resolveApiBaseUrl();
 let accessToken: string | null = null;
 
 export function setAccessToken(token: string | null) {

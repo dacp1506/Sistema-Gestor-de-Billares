@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { login, registerAdminGeneral, type AuthUser } from '../services/auth';
-import { setAccessToken } from '../services/api';
+import { API_BASE_URL, ApiError, setAccessToken } from '../services/api';
 import { colors, shadows } from '../theme';
 
 type Props = {
@@ -50,7 +50,10 @@ export default function LoginScreen({ onLogin }: Props) {
       setAccessToken(result.token);
       onLogin(result.user);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : 'No se pudo iniciar sesión.');
+      const message = loginError instanceof Error ? loginError.message : 'No se pudo iniciar sesión.';
+      const isNetworkIssue = loginError instanceof ApiError
+        && (loginError.code === 'NETWORK_ERROR' || loginError.code === 'NETWORK_TIMEOUT');
+      setError(isNetworkIssue ? `${message} Servidor: ${API_BASE_URL}` : message);
     } finally {
       setSubmitting(false);
     }
@@ -164,6 +167,8 @@ export default function LoginScreen({ onLogin }: Props) {
             {registering ? '¿Ya tienes cuenta? Inicia sesión' : '¿Primera vez? Registrar administrador'}
           </Text>
         </Pressable>
+
+        {__DEV__ ? <Text style={styles.devHint}>Servidor: {API_BASE_URL}</Text> : null}
       </View>
     </SafeAreaView>
   );
@@ -231,6 +236,7 @@ const styles = StyleSheet.create({
   registrationNotice: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 14 },
   linkButton: { alignItems: 'center', paddingTop: 16 },
   linkText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  devHint: { color: colors.textMuted, fontSize: 10, textAlign: 'center', marginTop: 16 },
   disabled: { opacity: 0.55 },
   pressed: { opacity: 0.82 },
 });

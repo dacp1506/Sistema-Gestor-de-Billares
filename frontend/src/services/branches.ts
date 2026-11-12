@@ -7,6 +7,9 @@ export type Branch = {
   telefono: string | null;
   estado: boolean;
   creado_en?: string;
+  mesas_total?: number;
+  mesas_ocupadas?: number;
+  ingresos_hoy?: number | string;
 };
 
 export type BranchInput = {

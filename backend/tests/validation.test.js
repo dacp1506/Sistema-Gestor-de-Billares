@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateBranch, validateTable, validateProduct, validateSale, validateStartSession, validateCashOpen, validateCashClose, validateReservation, validateReservationStatus, validateLogin, validateRegistration, validateUser } = require('../src/middlewares/validate');
+const { validateBranch, validateTable, validateProduct, validateSale, validateStartSession, validateCashOpen, validateCashClose, validateReservation, validateReservationStatus, validateLogin, validateRegistration, validateUser, validateSettings } = require('../src/middlewares/validate');
 
 function runValidation(middleware, body, params = {}, method = 'POST') {
   const request = { body, params, method };
@@ -222,4 +222,37 @@ test('usuario valida rol y asignación de sucursal', () => {
   const partialUpdate = runValidation(validateUser, { activo: false }, {}, 'PUT');
   assert.equal(partialUpdate.error, undefined);
   assert.deepEqual(partialUpdate.request.validatedBody, { activo: false });
+});
+
+test('configuración valida tema, idioma, moneda, IVA y formato de impresión', () => {
+  const valid = runValidation(validateSettings, {
+    tema: 'dark',
+    idioma: 'es',
+    moneda: 'BOB',
+    nombre_comercial: '  SALÓN DE BILLAR BOLA8  ',
+    iva_porcentaje: 13,
+    formato_impresion: '80mm',
+  }, {}, 'PUT');
+  assert.equal(valid.error, undefined);
+  assert.equal(valid.request.validatedBody.nombre_comercial, 'SALÓN DE BILLAR BOLA8');
+  assert.equal(valid.request.validatedBody.iva_porcentaje, 13);
+
+  const partial = runValidation(validateSettings, { formato_impresion: 'A4' }, {}, 'PUT');
+  assert.equal(partial.error, undefined);
+  assert.deepEqual(partial.request.validatedBody, { formato_impresion: 'A4' });
+
+  const invalidTheme = runValidation(validateSettings, { tema: 'azul' }, {}, 'PUT');
+  assert.equal(invalidTheme.error.code, 'VALIDATION_ERROR');
+
+  const invalidCurrency = runValidation(validateSettings, { moneda: 'JPY' }, {}, 'PUT');
+  assert.equal(invalidCurrency.error.code, 'VALIDATION_ERROR');
+
+  const invalidTax = runValidation(validateSettings, { iva_porcentaje: 45 }, {}, 'PUT');
+  assert.equal(invalidTax.error.code, 'VALIDATION_ERROR');
+
+  const blankName = runValidation(validateSettings, { nombre_comercial: '   ' }, {}, 'PUT');
+  assert.equal(blankName.error.code, 'VALIDATION_ERROR');
+
+  const emptyBody = runValidation(validateSettings, {}, {}, 'PUT');
+  assert.equal(emptyBody.error.code, 'VALIDATION_ERROR');
 });

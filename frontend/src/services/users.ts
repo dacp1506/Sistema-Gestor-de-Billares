@@ -15,7 +15,7 @@ export type User = {
 
 export type UserInput = {
   nombre: string;
-  username?: string;
+  username?: string | null;
   email?: string | null;
   password: string;
   rol: UserRole;
@@ -26,8 +26,14 @@ export type UserInput = {
 type CollectionResponse<T> = { data: T[] };
 type ItemResponse<T> = { data: T; message?: string };
 
-export async function listUsers(branchId?: number | string): Promise<User[]> {
-  const query = branchId ? `?id_sucursal=${encodeURIComponent(String(branchId))}` : '';
+export async function listUsers(
+  branchId?: number | string,
+  includeInactive = false,
+): Promise<User[]> {
+  const params: string[] = [];
+  if (branchId) params.push(`id_sucursal=${encodeURIComponent(String(branchId))}`);
+  if (includeInactive) params.push('inactivas=true');
+  const query = params.length ? `?${params.join('&')}` : '';
   const response = await apiRequest<CollectionResponse<User>>(`/usuarios${query}`);
   return response.data;
 }

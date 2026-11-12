@@ -11,8 +11,8 @@ Sistema de gestión multi-sucursal para salones de billar. El backend REST está
 
 1. Instala las dependencias: `npm --prefix backend install` y `npm --prefix frontend install`.
 2. Copia `backend/.env.example` a `backend/.env` y configura `DATABASE_URL`, `DATABASE_SSL=true` y un `JWT_SECRET` aleatorio. Puedes generarlo con `node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"`; no lo compartas ni lo subas al repositorio. El backend usa HTTP `PORT=3000` por defecto. `HOST=0.0.0.0` hace que escuche en todas las interfaces, pero no es una URL que se pueda abrir en el navegador; en la misma computadora usa `http://localhost:3000`. Desde otro dispositivo, usa la IP LAN del PC (por ejemplo, `http://192.168.1.20:3000`). El puerto PostgreSQL `5432` es para la base de datos, no para el servidor HTTP. Para validar el certificado de Supabase, descarga su certificado raíz desde Database Settings → SSL Configuration, guárdalo como `backend/certs/supabase-root.crt` y configura `DATABASE_SSL_CA=certs/supabase-root.crt`.
-3. Copia `frontend/.env.example` a `frontend/.env`. Para navegador local conserva `http://127.0.0.1:3000/api`; para un teléfono, usa la IP LAN del PC y el puerto HTTP del backend (por ejemplo `http://192.168.1.20:3000/api`). No pongas la contraseña de Supabase ni `JWT_SECRET` en variables `EXPO_PUBLIC_*`.
-4. En una base nueva, ejecuta `backend/database/schema.sql` en Supabase o con `psql`. En una base existente creada con el esquema anterior, ejecuta primero y una sola vez `backend/database/migrations/add_usernames_to_branch_staff.sql`; asigna nombres iniciales `operador_<id>` al personal y conserva los correos previos. No vuelvas a ejecutar `schema.sql` antes de esa migración: las tablas existentes todavía no tienen la columna `username`.
+3. Copia `frontend/.env.example` a `frontend/.env`. Para navegador local conserva `http://127.0.0.1:3000/api`; para un teléfono, usa la IP LAN del PC y el puerto HTTP del backend (por ejemplo `http://192.168.1.20:3000/api`). No pongas la contraseña de Supabase ni `JWT_SECRET` en variables `EXPO_PUBLIC_*`. La URL base se resuelve en tiempo de ejecución en `frontend/src/services/api.ts` (con `expo-constants`): si `EXPO_PUBLIC_API_URL` apunta a `127.0.0.1` o `localhost` y la app corre en Android, se descarta porque en el teléfono sería el propio dispositivo, y se usa la IP del host de Metro con el puerto `3000`; en el emulador de Android se usa `10.0.2.2`. Como las variables `EXPO_PUBLIC_*` se incrustan al generar el bundle, reinicia Expo con `npx expo start -c` después de cambiarlas.
+4. En una base nueva, ejecuta `backend/database/schema.sql` en Supabase o con `psql`. En una base existente creada con el esquema anterior, ejecuta primero y una sola vez `backend/database/migrations/add_usernames_to_branch_staff.sql`; asigna nombres iniciales `operador_<id>` al personal y conserva los correos previos. No vuelvas a ejecutar `schema.sql` antes de esa migración: las tablas existentes todavía no tienen la columna `username`. En una base existente ejecuta además `backend/database/migrations/add_user_settings.sql` (crea la tabla `configuraciones_usuario` con las preferencias de cada cuenta); ambas migraciones son idempotentes.
 5. No ejecutes `backend/database/seed.js` en Supabase ni en una base con datos reales: contiene identificadores fijos, cuentas de demostración y movimientos ficticios. Crea el catálogo desde la aplicación o inserta únicamente datos base revisados con SQL; las ventas, reservas, sesiones y turnos deben generarse por operaciones reales.
 6. Crea el primer `admin_general` desde “Registrar administrador” en el login, o ejecuta `node database/create-admin.js` desde `backend/` en una terminal interactiva. El registro público se cierra al existir un administrador general; después, solo un administrador autenticado puede crear cuentas de sucursal. El comando CLI pide nombre, correo y contraseña oculta.
 7. Desde la raíz del repositorio, inicia el backend API con `npm start`; con la configuración de ejemplo queda en `http://localhost:3000`.
@@ -51,7 +51,24 @@ frontend/
   package.json
   src/
     components/
+      BranchPicker.tsx        # Selector de sucursal
+      OptionPicker.tsx        # Selector desplegable reutilizable
+      ProductFormModal.tsx    # Modal de alta/edición de producto
+    hooks/
+      useAccessibleModal.ts   # Escape, foco y lectura de pantalla en diálogos
     screens/
+      BranchesScreen.tsx      # Sucursales cadena
+      DashboardScreen.tsx
+      HistoryScreen.tsx
+      LoginScreen.tsx
+      PosScreen.tsx
+      ProductsScreen.tsx      # Inventario local
+      ReportsScreen.tsx
+      ReservationsScreen.tsx
+      ArqueoScreen.tsx
+      SettingsScreen.tsx      # Configuración de la aplicación
+      TablesScreen.tsx
+      UsersScreen.tsx         # Usuarios y roles
     services/
     theme.ts
 ```
@@ -62,6 +79,22 @@ Expo es la aplicación cliente que se está ampliando para compartir interfaz y 
 
 `backend/database/seed.js` es un seed legado y no debe ejecutarse hasta corregirlo y validarlo: usa IDs fijos, cuentas de demostración y actividad ficticia; además, un detalle de venta no cumple la restricción de subtotal del esquema. Para datos reales, crea el catálogo desde la interfaz o usa SQL revisado.
 
+## Módulos de administración
+
+Los tres módulos de administración siguen la maqueta de `DATA TO BUILD/index.html` (solo visual) y consumen la API real, sin datos de sustitución.
+
+**Inventario local** (`frontend/src/screens/ProductsScreen.tsx`): tabla en escritorio y tarjetas en móvil con Producto, Categoría, Precio de venta, Stock actual, Estado del stock y Reabastecer. Incluye buscador, selector de sucursal, resumen (productos activos, productos con stock bajo y sucursal), alta y edición de producto, baja lógica con confirmación y la acción rápida **+10 Unid.**, que suma diez unidades con `PUT /api/productos/:id`.
+
+**Sucursales cadena** (`frontend/src/screens/BranchesScreen.tsx`): cuadrícula de tarjetas con nombre, badge ACTIVA, dirección, teléfono, **Mesas Activas x/y**, **Ingresos Hoy** y el botón **Administrar esta Sucursal**, que abre el dashboard con esa sucursal seleccionada. Desde la misma tarjeta se editan los datos o se desactiva la sucursal con confirmación; el alta se hace en un modal con nombre, dirección y teléfono. Las tres métricas por sucursal las calcula el backend en `GET /api/sucursales`.
+
+**Usuarios y roles** (`frontend/src/screens/UsersScreen.tsx`, solo `admin_general`): tres indicadores (Usuarios Activos, Admins de Sucursal, Cajeros / Operadores), barra de filtros (búsqueda por nombre o credencial, rol y sucursal) y tabla Usuario / Rol / Sucursal / Credencial / Estado / Acciones. Permite registrar y editar usuarios, activar o desactivar con un clic sobre el estado y dar de baja con confirmación. La columna Credencial muestra el usuario `@nombre` o el correo real: la maqueta usa un PIN de 4 dígitos, pero el esquema `usuarios` no tiene esa columna, así que no se inventan datos. El administrador no puede desactivar ni editar su propia cuenta, y la contraseña solo se envía cuando se escribe una nueva.
+
+## Configuración de la aplicación
+
+El módulo de **Configuración App** (`frontend/src/screens/SettingsScreen.tsx`) reproduce el panel de la maqueta y guarda las preferencias de la cuenta en la base de datos (`GET|PUT /api/configuraciones`): tema, idioma de interfaz, moneda del sistema, nombre comercial del ticket, IVA declarado y formato de impresión. Se abre desde el botón **Configuración App** del pie de la barra lateral, que muestra la píldora con el idioma y la moneda activos (`ES • Bs.`).
+
+El nombre comercial y el formato de impresión se aplican de verdad al comprobante que se imprime desde el historial (encabezado del ticket y hoja 80mm o A4). El tema, el idioma y la moneda se guardan, pero solo están habilitados las opciones que el cliente soporta hoy: el tema “Oscuro Lounge”, el español y los bolivianos. Las demás opciones de la maqueta aparecen desactivadas con su explicación, porque el cliente no tiene tema claro, traducción al inglés ni tasa de cambio configurada, y no se inventan esos datos. El IVA queda como parámetro declarado: el sistema no recalcula impuestos sobre los precios del catálogo.
+
 ## API disponible
 
 - `POST /api/auth/login` — autentica al administrador general por email y al personal por nombre de usuario (también admite email para cuentas antiguas) y devuelve JWT.
@@ -69,21 +102,22 @@ Expo es la aplicación cliente que se está ampliando para compartir interfaz y 
 - `GET /api/health` — estado del servidor y conexión a base de datos.
 - `GET /api/dashboard?id_sucursal=:id` — resumen operativo, sesiones activas, ventas POS del día y caja abierta.
 - `GET /api/reportes?periodo={diario,semanal,mensual,anual}&id_sucursal=:id` — agregados financieros por período (administradores).
-- `GET|POST /api/sucursales` — listar y crear sucursales.
+- `GET|POST /api/sucursales` — listar y crear sucursales. El listado admite `?inactivas=true` e incluye las métricas `mesas_total`, `mesas_ocupadas` e `ingresos_hoy` (productos + alquileres del día) calculadas en una sola consulta.
 - `GET|PUT|DELETE /api/sucursales/:id` — consultar, actualizar y desactivar sucursales.
 - `GET /api/mesas/sucursal/:id_sucursal` — listar mesas activas de una sucursal.
 - `GET|POST /api/mesas` y `GET|PUT|DELETE /api/mesas/:id` — administrar mesas.
 - `GET /api/productos?id_sucursal=:id` — listar el inventario de una sucursal.
 - `GET|POST /api/productos` y `GET|PUT|DELETE /api/productos/:id` — administrar productos.
-- `GET|POST /api/usuarios` y `GET|PUT|DELETE /api/usuarios/:id` — administrar usuarios (solo `admin_general`).
+- `GET|POST /api/usuarios` y `GET|PUT|DELETE /api/usuarios/:id` — administrar usuarios (solo `admin_general`). El listado admite `?id_sucursal=:id` y `?inactivas=true`; `PUT` acepta actualizaciones parciales, por ejemplo `{"activo": false}` para activar o desactivar sin enviar el resto de campos.
 
-El administrador general se registra con correo y contraseña. Los administradores de sucursal y cajeros requieren nombre visible, nombre de usuario único, contraseña y sucursal; no necesitan correo. Para cuentas antiguas, la migración genera nombres temporales `operador_<id>` que el administrador general puede reemplazar desde la base hasta que la edición de usuarios esté disponible.
+El administrador general se registra con correo y contraseña. Los administradores de sucursal y cajeros requieren nombre visible, nombre de usuario único, contraseña y sucursal; no necesitan correo. Para cuentas antiguas, la migración genera nombres temporales `operador_<id>` que el administrador general puede reemplazar desde el módulo “Usuarios y roles” o desde SQL.
 - `GET /api/caja`, `POST /api/caja/apertura` y `PATCH /api/caja/:id/cerrar` — consultar y controlar turnos de caja.
 - `GET|POST /api/ventas` — historial y registro transaccional POS.
 - `GET /api/sesiones` y `/api/sesiones/activas` — consultar sesiones.
 - `POST /api/sesiones` y `PATCH /api/sesiones/:id/{pausar,reanudar,finalizar}` — controlar cronómetros.
 - `GET|POST /api/reservas` — listar y crear reservas por sucursal o fecha.
 - `GET /api/reservas/:id` y `PATCH /api/reservas/:id/estado` — consultar y actualizar estado de una reserva.
+- `GET|PUT /api/configuraciones` — leer y guardar las preferencias de la cuenta autenticada (tema, idioma, moneda, nombre comercial del ticket, IVA declarado y formato de impresión). `PUT` acepta actualizaciones parciales.
 
 Todos los endpoints `/api` excepto `POST /api/auth/login` requieren `Authorization: Bearer <token>`. Las cuentas `admin_general` pueden consultar todas las sucursales y administrar usuarios y sucursales; `admin_sucursal` y `cajero` quedan limitados a la sucursal de su cuenta. La administración de productos y mesas requiere rol administrador. Las operaciones de venta y caja usan el usuario del token. Para abrir una sesión desde el dashboard global, `admin_general` selecciona un usuario activo de la sucursal; el backend comprueba que ese operador pertenezca a la sucursal. Los administradores y cajeros de sucursal siguen usando su identidad autenticada.
 
@@ -91,7 +125,7 @@ Para registrar ventas se requieren `id_sucursal`, `id_usuario`, `tipo_venta` (`d
 
 Las reservas validan mesa activa, horario válido y conflicto de solapamiento dentro de la misma mesa para evitar duplicados en la misma franja.
 
-El historial del frontend permite filtrar las últimas 100 ventas por fecha, tipo y sucursal; los administradores generales pueden consultar todas las sucursales. El detalle del recibo incluye los artículos y, en web, se puede imprimir o guardar como PDF desde el navegador.
+El historial del frontend permite filtrar las últimas 100 ventas por fecha, tipo y sucursal; los administradores generales pueden consultar todas las sucursales. El detalle del recibo incluye los artículos y, en web, se puede imprimir o guardar como PDF desde el navegador: la ventana de impresión se abre con un retardo corto y con el marcado ya inyectado, para que el comprobante salga completo y no una hoja en blanco.
 
 El arqueo calculado suma la base inicial y las ventas de productos POS del operador durante el turno; no incluye cobros de alquiler de mesa porque esos cobros no se registran como transacciones. Los reportes agregan ventas de productos y el importe calculado al finalizar sesiones; son ingresos registrados, no utilidad neta ni conciliación de cobros. No incluyen costos, impuestos calculados, ni desglose por método de pago.
 
@@ -105,7 +139,7 @@ No se publican credenciales de demostración. En una base nueva, crea el primer 
 npm run check
 ```
 
-`npm run check` ejecuta las pruebas backend y el typecheck del frontend. Este último usa una pila de Node ampliada porque TypeScript 6 puede exceder la pila predeterminada en este proyecto. `npm start` inicia solo la API; `npm run frontend:web` inicia el cliente Expo para navegador. Las pruebas unitarias y de tipos no requieren base de datos. Para usar la API, configura PostgreSQL en `backend/.env`; si PostgreSQL no está disponible o el URI apunta a una base inexistente, la API devuelve un error `503` sanitizado. En desarrollo CORS admite localhost y direcciones LAN; antes de publicar, restringe `FRONTEND_ORIGINS` a los orígenes del despliegue.
+`npm run check` ejecuta las pruebas backend y el typecheck del frontend (30 pruebas del backend en la versión actual). Este último usa una pila de Node ampliada porque TypeScript 6 puede exceder la pila predeterminada en este proyecto. `npm start` inicia solo la API; `npm run frontend:web` inicia el cliente Expo para navegador. Las pruebas unitarias y de tipos no requieren base de datos. Para usar la API, configura PostgreSQL en `backend/.env`; si PostgreSQL no está disponible o el URI apunta a una base inexistente, la API devuelve un error `503` sanitizado. En desarrollo CORS admite localhost y direcciones LAN; antes de publicar, restringe `FRONTEND_ORIGINS` a los orígenes del despliegue.
 
 El uso online está soportado por el cliente y la API cuando la base de datos es accesible. El modo offline aún no está implementado: antes de construirlo hay que definir qué operaciones se permiten desconectadas, dónde se almacenan localmente y cómo se sincronizan ventas, inventario, sesiones y cambios concurrentes entre sucursales.
 

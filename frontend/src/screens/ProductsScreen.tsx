@@ -1,16 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
+  Modal,
   Pressable,
   RefreshControl,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import {
+  AlertTriangle,
+  Boxes,
+  CheckCircle2,
+  Package,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+} from 'lucide-react-native';
 import { BranchPicker } from '../components/BranchPicker';
 import { ProductFormModal } from '../components/ProductFormModal';
 import { ApiError } from '../services/api';
@@ -27,16 +39,36 @@ import { colors, shadows } from '../theme';
 
 type Notice = { kind: 'success' | 'error'; text: string } | null;
 
+function money(value: number | string) {
+  return `Bs. ${Number(value || 0).toLocaleString('es-BO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof ApiError) {
+    if (error.code === 'NETWORK_ERROR' || error.code === 'NETWORK_TIMEOUT') {
+      return `${error.message} Si ejecutas la app en un teléfono, configura EXPO_PUBLIC_API_URL con la IP local de tu computadora.`;
+    }
+    return error.message;
+  }
+  return 'Ocurrió un error inesperado al comunicarse con el servidor.';
+}
+
 export default function ProductsScreen({ user }: { user: AuthUser }) {
   const { width } = useWindowDimensions();
-  const compact = width < 720;
+  const compact = width < 760;
   const canManageProducts = user.rol !== 'cajero';
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [branchId, setBranchId] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deactivating, setDeactivating] = useState(false);
+  const [restockingId, setRestockingId] = useState<string | null>(null);
   const [branchError, setBranchError] = useState<string | null>(null);
   const [productError, setProductError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -45,7 +77,6 @@ export default function ProductsScreen({ user }: { user: AuthUser }) {
   const [formVisible, setFormVisible] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDeactivate, setProductToDeactivate] = useState<Product | null>(null);
-  const [deactivating, setDeactivating] = useState(false);
 
   const loadBranches = useCallback(async () => {
     setBranchesLoading(true);
@@ -108,6 +139,8 @@ export default function ProductsScreen({ user }: { user: AuthUser }) {
     [products],
   );
 
+  const selectedBranch = branches.find((branch) => String(branch.id_sucursal) === branchId);
+
   const refresh = async () => {
     if (!branches.length) await loadBranches();
     else await loadProducts(branchId);
@@ -130,14 +163,17 @@ export default function ProductsScreen({ user }: { user: AuthUser }) {
     setFormError(null);
     try {
       if (editingProduct) {
-        await updateProduct(editingProduct.id_producto, input);
-        setNotice({ kind: 'success', text: 'Producto actualizado correctamente.' });
+        const updated = await updateProduct(editingProduct.id_producto, input);
+        setProducts((current) => current.map((item) => (
+          String(item.id_producto) === String(updated.id_producto) ? updated : item
+        )));
+        setNotice({ kind: 'success', text: `${updated.nombre} se actualizó correctamente.` });
       } else {
-        await createProduct(input);
-        setNotice({ kind: 'success', text: 'Producto registrado en el inventario.' });
+        const created = await createProduct(input);
+        setProducts((current) => [...current, created].sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setNotice({ kind: 'success', text: `${created.nombre} se registró en el inventario local.` });
       }
       setFormVisible(false);
-      await loadProducts(branchId);
     } catch (error) {
       setFormError(getErrorMessage(error));
     } finally {
@@ -145,10 +181,33 @@ export default function ProductsScreen({ user }: { user: AuthUser }) {
     }
   };
 
+  const restock = async (product: Product) => {
+    if (restockingId) return;
+    setRestockingId(String(product.id_producto));
+    setNotice(null);
+    try {
+      const updated = await updateProduct(product.id_producto, {
+        nombre: product.nombre,
+        precio_venta: Number(product.precio_venta),
+        stock: product.stock + 10,
+        stock_minimo: product.stock_minimo,
+        id_sucursal: Number(product.id_sucursal),
+        categoria: product.categoria || null,
+      });
+      setProducts((current) => current.map((item) => (
+        String(item.id_producto) === String(updated.id_producto) ? updated : item
+      )));
+      setNotice({ kind: 'success', text: `Stock reabastecido: +10 unid. de ${product.nombre}.` });
+    } catch (error) {
+      setNotice({ kind: 'error', text: getErrorMessage(error) });
+    } finally {
+      setRestockingId(null);
+    }
+  };
+
   const confirmDeactivate = async () => {
     if (!productToDeactivate) return;
     setDeactivating(true);
-    setProductError(null);
     try {
       await deactivateProduct(productToDeactivate.id_producto);
       setProducts((current) => current.filter(
@@ -157,135 +216,202 @@ export default function ProductsScreen({ user }: { user: AuthUser }) {
       setNotice({ kind: 'success', text: `${productToDeactivate.nombre} se desactivó del inventario.` });
       setProductToDeactivate(null);
     } catch (error) {
-      setProductError(getErrorMessage(error));
+      setNotice({ kind: 'error', text: getErrorMessage(error) });
       setProductToDeactivate(null);
     } finally {
       setDeactivating(false);
     }
   };
 
-  const renderProduct = ({ item }: { item: Product }) => (
-    <ProductCard
-      product={item}
-      compact={compact}
-      canManage={canManageProducts}
-      onEdit={() => openEdit(item)}
-      onDeactivate={() => setProductToDeactivate(item)}
-    />
-  );
-
   return (
     <SafeAreaView style={styles.safeArea}>
-      <FlatList
-        data={filteredProducts}
-        keyExtractor={(item) => String(item.id_producto)}
-        renderItem={renderProduct}
+      <ScrollView
         contentContainerStyle={[styles.content, compact && styles.contentCompact]}
-        refreshControl={<RefreshControl refreshing={loading || branchesLoading} onRefresh={refresh} tintColor={colors.accent} />}
-        ListHeaderComponent={(
-          <View style={styles.headerArea}>
-            <View style={[styles.topBar, compact && styles.topBarCompact]}>
-              <View style={styles.brand}>
-                <View style={styles.logo}><Text style={styles.logoText}>8</Text></View>
-                <View>
-                  <Text style={styles.brandName}>BOLA<Text style={styles.brandAccent}>8</Text></Text>
-                  <Text style={styles.brandSub}>GESTIÓN MULTI-SUCURSAL</Text>
-                </View>
-              </View>
-              <Text style={styles.environment}>INVENTARIO</Text>
+        refreshControl={(
+          <RefreshControl
+            refreshing={loading || branchesLoading}
+            onRefresh={refresh}
+            tintColor={colors.accent}
+          />
+        )}
+      >
+        <View style={[styles.headerCard, shadows]}>
+          <View style={[styles.headerTop, compact && styles.headerTopCompact]}>
+            <View style={styles.headingCopy}>
+              <Text style={styles.eyebrow}>ADMINISTRACIÓN · INVENTARIO</Text>
+              <Text style={styles.title}>Inventario Local de Sucursal</Text>
+              <Text style={styles.subtitle}>
+                Control de existencias sincronizado automáticamente con las ventas del POS.
+              </Text>
             </View>
+            {canManageProducts ? (
+              <Pressable
+                accessibilityRole="button"
+                disabled={!branchId}
+                onPress={openCreate}
+                style={({ pressed }) => [
+                  styles.primaryButton,
+                  pressed && styles.pressed,
+                  !branchId && styles.disabled,
+                ]}
+              >
+                <Plus color={colors.background} size={16} strokeWidth={3} />
+                <Text style={styles.primaryText}>Nuevo Producto</Text>
+              </Pressable>
+            ) : null}
+          </View>
 
-            <View style={styles.headingRow}>
-              <View style={styles.headingCopy}>
-                <Text style={styles.eyebrow}>OPERACIÓN · PRODUCTOS</Text>
-                <Text style={styles.pageTitle}>Inventario local</Text>
-                <Text style={styles.subtitle}>{canManageProducts ? 'Consulta y administra los productos de cada sucursal.' : 'Consulta el inventario de tu sucursal.'}</Text>
-              </View>
-              {canManageProducts ? (
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={!branchId}
-                  onPress={openCreate}
-                  style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, !branchId && styles.disabled]}
-                >
-                  <Text style={styles.primaryIcon}>＋</Text>
-                  <Text style={styles.primaryText}>Nuevo producto</Text>
-                </Pressable>
-              ) : null}
-            </View>
-
-            <View style={[styles.toolbar, compact && styles.toolbarCompact]}>
-              <BranchPicker branches={branches} selectedBranchId={branchId} onSelect={setBranchId} />
-              <View style={styles.searchWrap}>
-                <Text style={styles.searchIcon}>⌕</Text>
-                <TextInput
-                  accessibilityLabel="Buscar productos"
-                  editable={products.length > 0}
-                  onChangeText={setSearch}
-                  placeholder="Buscar por nombre o categoría"
-                  placeholderTextColor={colors.textMuted}
-                  style={styles.searchInput}
-                  value={search}
-                />
-              </View>
-            </View>
-
-            {branchesLoading ? (
-              <StatusCard title="Cargando sucursales…" />
-            ) : branchError ? (
-              <StatusCard
-                kind="error"
-                title="No se pudieron cargar las sucursales"
-                message={branchError}
-                actionLabel="Reintentar"
-                onAction={loadBranches}
+          <View style={[styles.toolbar, compact && styles.toolbarCompact]}>
+            <BranchPicker branches={branches} selectedBranchId={branchId} onSelect={setBranchId} />
+            <View style={styles.searchWrap}>
+              <Search color={colors.textMuted} size={16} />
+              <TextInput
+                accessibilityLabel="Filtrar producto"
+                editable={products.length > 0}
+                onChangeText={setSearch}
+                placeholder="Filtrar producto..."
+                placeholderTextColor={colors.textMuted}
+                style={styles.searchInput}
+                value={search}
               />
-            ) : branches.length === 0 ? (
-              <StatusCard title="No hay sucursales activas" message="Registra o activa una sucursal para administrar su inventario." />
-            ) : (
-              <>
-                <View style={[styles.statsRow, compact && styles.statsRowCompact]}>
-                  <StatCard label="PRODUCTOS ACTIVOS" value={loading ? '…' : String(products.length)} accent />
-                  <StatCard label="STOCK BAJO" value={loading ? '…' : String(lowStockCount)} warning={lowStockCount > 0} />
-                  <StatCard label="SUCURSAL SELECCIONADA" value={branches.find((branch) => String(branch.id_sucursal) === branchId)?.nombre || '—'} wide />
-                </View>
+            </View>
+          </View>
+        </View>
 
-                <View style={styles.listHeading}>
-                  <View>
-                    <Text style={styles.sectionTitle}>Productos</Text>
-                    <Text style={styles.sectionSub}>Los cambios se guardan en la base de datos.</Text>
-                  </View>
-                  <Text style={styles.resultCount}>{filteredProducts.length} {filteredProducts.length === 1 ? 'artículo' : 'artículos'}</Text>
-                </View>
-              </>
-            )}
+        {branchesLoading ? (
+          <StatusCard title="Cargando sucursales…" />
+        ) : branchError ? (
+          <StatusCard
+            kind="error"
+            title="No se pudieron cargar las sucursales"
+            message={branchError}
+            actionLabel="Reintentar"
+            onAction={loadBranches}
+          />
+        ) : branches.length === 0 ? (
+          <StatusCard
+            title="No hay sucursales activas"
+            message="Registra o activa una sucursal para administrar su inventario."
+          />
+        ) : (
+          <>
+            <View style={styles.summaryRow}>
+              <SummaryChip
+                icon={<Package color={colors.accent} size={15} />}
+                label="Productos activos"
+                value={loading ? '…' : String(products.length)}
+              />
+              <SummaryChip
+                icon={<AlertTriangle color={lowStockCount ? colors.danger : colors.textMuted} size={15} />}
+                label="Con stock bajo"
+                value={loading ? '…' : String(lowStockCount)}
+                tone={lowStockCount ? 'danger' : 'neutral'}
+              />
+              <SummaryChip
+                icon={<Boxes color={colors.info} size={15} />}
+                label="Sucursal"
+                value={selectedBranch?.nombre || '—'}
+                tone="info"
+                wide
+              />
+            </View>
 
-            {notice && (
+            {notice ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Descartar mensaje"
                 onPress={() => setNotice(null)}
                 style={[styles.notice, notice.kind === 'error' ? styles.noticeError : styles.noticeSuccess]}
               >
-                <Text style={[styles.noticeText, notice.kind === 'error' ? styles.errorText : styles.successText]}>{notice.text}</Text>
+                <Text style={[styles.noticeText, notice.kind === 'error' ? styles.noticeErrorText : styles.noticeSuccessText]}>
+                  {notice.text}
+                </Text>
                 <Text style={styles.noticeDismiss}>×</Text>
               </Pressable>
-            )}
+            ) : null}
 
-            {!!productError && (
-              <StatusCard kind="error" title="No se pudieron cargar los productos" message={productError} actionLabel="Reintentar" onAction={() => loadProducts(branchId)} />
-            )}
-          </View>
+            {productError ? (
+              <StatusCard
+                kind="error"
+                title="No se pudieron cargar los productos"
+                message={productError}
+                actionLabel="Reintentar"
+                onAction={() => loadProducts(branchId)}
+              />
+            ) : null}
+
+            <View style={[styles.tableCard, shadows]}>
+              {!compact ? (
+                <View style={styles.tableHead}>
+                  <Text style={[styles.headCell, styles.colProduct]}>Producto</Text>
+                  <Text style={[styles.headCell, styles.colCategory]}>Categoría</Text>
+                  <Text style={[styles.headCell, styles.colPrice]}>Precio venta</Text>
+                  <Text style={[styles.headCell, styles.colStock]}>Stock actual</Text>
+                  <Text style={[styles.headCell, styles.colStatus]}>Estado stock</Text>
+                  <Text style={[styles.headCell, styles.colActions, styles.alignRight]}>Reabastecer</Text>
+                </View>
+              ) : null}
+
+              {loading ? (
+                <View style={styles.emptyState}>
+                  <ActivityIndicator color={colors.accent} />
+                  <Text style={styles.emptyText}>Cargando inventario…</Text>
+                </View>
+              ) : products.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Package color={colors.textMuted} size={34} />
+                  <Text style={styles.emptyTitle}>Inventario vacío</Text>
+                  <Text style={styles.emptyText}>
+                    Esta sucursal aún no tiene productos registrados.
+                  </Text>
+                  {canManageProducts ? (
+                    <Pressable accessibilityRole="button" onPress={openCreate} style={styles.emptyButton}>
+                      <Text style={styles.emptyButtonText}>Registrar producto</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : filteredProducts.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Search color={colors.textMuted} size={30} />
+                  <Text style={styles.emptyTitle}>Sin resultados</Text>
+                  <Text style={styles.emptyText}>No hay productos que coincidan con “{search}”.</Text>
+                  <Pressable accessibilityRole="button" onPress={() => setSearch('')} style={styles.emptyButton}>
+                    <Text style={styles.emptyButtonText}>Limpiar búsqueda</Text>
+                  </Pressable>
+                </View>
+              ) : compact ? (
+                filteredProducts.map((product) => (
+                  <ProductCard
+                    key={String(product.id_producto)}
+                    product={product}
+                    canManage={canManageProducts}
+                    restocking={restockingId === String(product.id_producto)}
+                    onRestock={() => void restock(product)}
+                    onEdit={() => openEdit(product)}
+                    onDeactivate={() => setProductToDeactivate(product)}
+                  />
+                ))
+              ) : (
+                filteredProducts.map((product) => (
+                  <ProductRow
+                    key={String(product.id_producto)}
+                    product={product}
+                    canManage={canManageProducts}
+                    restocking={restockingId === String(product.id_producto)}
+                    onRestock={() => void restock(product)}
+                    onEdit={() => openEdit(product)}
+                    onDeactivate={() => setProductToDeactivate(product)}
+                  />
+                ))
+              )}
+            </View>
+
+            <Text style={styles.footerNote}>
+              {filteredProducts.length} {filteredProducts.length === 1 ? 'artículo' : 'artículos'} · Los cambios se guardan en la base de datos.
+            </Text>
+          </>
         )}
-        ListEmptyComponent={(
-          branchesLoading || branchError || branches.length === 0 || productError ? <View /> : loading
-            ? <StatusCard title="Cargando productos…" />
-            : products.length === 0
-              ? <StatusCard title="Inventario vacío" message="Esta sucursal aún no tiene productos registrados." actionLabel={canManageProducts ? 'Registrar producto' : undefined} onAction={canManageProducts ? openCreate : undefined} />
-              : <StatusCard title="Sin resultados" message="No hay productos que coincidan con la búsqueda." actionLabel="Limpiar búsqueda" onAction={() => setSearch('')} />
-        )}
-        ListFooterComponent={<View style={styles.listFooter} />}
-      />
+      </ScrollView>
 
       <ProductFormModal
         branchId={Number(branchId)}
@@ -297,94 +423,185 @@ export default function ProductsScreen({ user }: { user: AuthUser }) {
         visible={formVisible}
       />
 
-      {productToDeactivate && (
-        <ConfirmDialog
-          title="Desactivar producto"
-          message={`¿Desactivar “${productToDeactivate.nombre}” de esta sucursal? El registro de ventas histórico se conserva.`}
-          confirming={deactivating}
-          onCancel={() => !deactivating && setProductToDeactivate(null)}
-          onConfirm={confirmDeactivate}
-        />
-      )}
+      <ConfirmDialog
+        visible={Boolean(productToDeactivate)}
+        title="Desactivar producto"
+        message={productToDeactivate
+          ? `¿Desactivar “${productToDeactivate.nombre}” de esta sucursal? El registro de ventas histórico se conserva.`
+          : ''}
+        confirming={deactivating}
+        onCancel={() => !deactivating && setProductToDeactivate(null)}
+        onConfirm={() => void confirmDeactivate()}
+      />
     </SafeAreaView>
+  );
+}
+
+function SummaryChip({
+  icon,
+  label,
+  value,
+  tone = 'neutral',
+  wide = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'danger' | 'info';
+  wide?: boolean;
+}) {
+  return (
+    <View style={[styles.summaryChip, wide && styles.summaryChipWide]}>
+      <View style={styles.summaryIcon}>{icon}</View>
+      <View style={styles.summaryCopy}>
+        <Text style={styles.summaryLabel}>{label}</Text>
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.summaryValue,
+            tone === 'danger' && styles.summaryDanger,
+            tone === 'info' && styles.summaryInfo,
+          ]}
+        >
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function StatusBadge({ product }: { product: Product }) {
+  const low = product.stock <= product.stock_minimo;
+  return (
+    <View style={[styles.badge, low ? styles.badgeLow : styles.badgeOk]}>
+      {low
+        ? <AlertTriangle color={colors.danger} size={12} />
+        : <CheckCircle2 color={colors.accent} size={12} />}
+      <Text style={[styles.badgeText, low ? styles.badgeTextLow : styles.badgeTextOk]}>
+        {low ? `Stock bajo (mín. ${product.stock_minimo})` : 'Óptimo'}
+      </Text>
+    </View>
+  );
+}
+
+function ProductRow({
+  product,
+  canManage,
+  restocking,
+  onRestock,
+  onEdit,
+  onDeactivate,
+}: {
+  product: Product;
+  canManage: boolean;
+  restocking: boolean;
+  onRestock: () => void;
+  onEdit: () => void;
+  onDeactivate: () => void;
+}) {
+  return (
+    <View style={styles.tableRow}>
+      <View style={styles.colProduct}>
+        <Text numberOfLines={2} style={styles.productName}>{product.nombre}</Text>
+      </View>
+      <View style={styles.colCategory}>
+        <View style={styles.categoryChip}>
+          <Text numberOfLines={1} style={styles.categoryText}>{product.categoria || 'Sin categoría'}</Text>
+        </View>
+      </View>
+      <Text style={[styles.colPrice, styles.price]}>{money(product.precio_venta)}</Text>
+      <Text style={[styles.colStock, styles.stock]}>
+        {product.stock} <Text style={styles.stockUnit}>unid.</Text>
+      </Text>
+      <View style={styles.colStatus}>
+        <StatusBadge product={product} />
+      </View>
+      <View style={[styles.colActions, styles.rowActions]}>
+        {canManage ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Reabastecer ${product.nombre} en 10 unidades`}
+              disabled={restocking}
+              onPress={onRestock}
+              style={({ pressed }) => [styles.restockButton, pressed && styles.pressed, restocking && styles.disabled]}
+            >
+              {restocking
+                ? <ActivityIndicator color={colors.info} size="small" />
+                : <Text style={styles.restockText}>+10 Unid.</Text>}
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Editar ${product.nombre}`} onPress={onEdit} style={styles.iconButton}>
+              <Pencil color={colors.textMuted} size={15} />
+            </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Desactivar ${product.nombre}`} onPress={onDeactivate} style={[styles.iconButton, styles.iconButtonDanger]}>
+              <Trash2 color={colors.danger} size={15} />
+            </Pressable>
+          </>
+        ) : (
+          <Text style={styles.readOnlyText}>Solo lectura</Text>
+        )}
+      </View>
+    </View>
   );
 }
 
 function ProductCard({
   product,
-  compact,
   canManage,
+  restocking,
+  onRestock,
   onEdit,
   onDeactivate,
 }: {
   product: Product;
-  compact: boolean;
   canManage: boolean;
+  restocking: boolean;
+  onRestock: () => void;
   onEdit: () => void;
   onDeactivate: () => void;
 }) {
-  const lowStock = product.stock <= product.stock_minimo;
   return (
-    <View style={[styles.productCard, shadows, compact && styles.productCardCompact]}>
-      <View style={styles.productMain}>
-        <View style={styles.productIdentity}>
-          <View style={[styles.productIcon, lowStock && styles.productIconLow]}>
-            <Text style={[styles.productIconText, lowStock && styles.productIconTextLow]}>
-              {product.nombre.trim().slice(0, 1).toUpperCase() || 'P'}
-            </Text>
-          </View>
-          <View style={styles.productNameWrap}>
-            <Text numberOfLines={2} style={styles.productName}>{product.nombre}</Text>
-            <Text numberOfLines={1} style={styles.productCategory}>{product.categoria || 'Sin categoría'}</Text>
+    <View style={styles.mobileCard}>
+      <View style={styles.mobileTop}>
+        <View style={styles.mobileIdentity}>
+          <Text numberOfLines={2} style={styles.productName}>{product.nombre}</Text>
+          <View style={styles.categoryChip}>
+            <Text numberOfLines={1} style={styles.categoryText}>{product.categoria || 'Sin categoría'}</Text>
           </View>
         </View>
-        <View style={styles.productMetrics}>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>PRECIO</Text>
-            <Text style={styles.price}>Bs. {Number(product.precio_venta).toFixed(2)}</Text>
-          </View>
-          <View style={styles.metric}>
-            <Text style={styles.metricLabel}>STOCK</Text>
-            <Text style={[styles.stockValue, lowStock && styles.stockLow]}>{product.stock} <Text style={styles.stockUnit}>unid.</Text></Text>
-          </View>
-          <View style={styles.stockBadgeWrap}>
-            <Text style={[styles.stockBadge, lowStock ? styles.stockBadgeLow : styles.stockBadgeOk]}>
-              {lowStock ? `Bajo · mín. ${product.stock_minimo}` : 'Óptimo'}
-            </Text>
-          </View>
-        </View>
+        <Text style={styles.price}>{money(product.precio_venta)}</Text>
       </View>
+
+      <View style={styles.mobileMetrics}>
+        <View>
+          <Text style={styles.mobileMetricLabel}>STOCK ACTUAL</Text>
+          <Text style={styles.stock}>
+            {product.stock} <Text style={styles.stockUnit}>unid.</Text>
+          </Text>
+        </View>
+        <StatusBadge product={product} />
+      </View>
+
       {canManage ? (
-        <View style={styles.cardActions}>
-          <Pressable accessibilityRole="button" onPress={onEdit} style={styles.editButton}>
-            <Text style={styles.editButtonText}>Editar</Text>
+        <View style={styles.mobileActions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={restocking}
+            onPress={onRestock}
+            style={({ pressed }) => [styles.restockButton, styles.mobileRestock, pressed && styles.pressed, restocking && styles.disabled]}
+          >
+            {restocking
+              ? <ActivityIndicator color={colors.info} size="small" />
+              : <Text style={styles.restockText}>+10 Unid.</Text>}
           </Pressable>
-          <Pressable accessibilityRole="button" onPress={onDeactivate} style={styles.deleteButton}>
-            <Text style={styles.deleteButtonText}>Desactivar</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Editar ${product.nombre}`} onPress={onEdit} style={styles.iconButton}>
+            <Pencil color={colors.textMuted} size={15} />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Desactivar ${product.nombre}`} onPress={onDeactivate} style={[styles.iconButton, styles.iconButtonDanger]}>
+            <Trash2 color={colors.danger} size={15} />
           </Pressable>
         </View>
       ) : null}
-    </View>
-  );
-}
-
-function StatCard({
-  label,
-  value,
-  accent = false,
-  warning = false,
-  wide = false,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-  warning?: boolean;
-  wide?: boolean;
-}) {
-  return (
-    <View style={[styles.statCard, wide && styles.statWide]}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text numberOfLines={1} style={[styles.statValue, accent && styles.statAccent, warning && styles.statWarning]}>{value}</Text>
     </View>
   );
 }
@@ -404,27 +621,29 @@ function StatusCard({
 }) {
   return (
     <View style={[styles.statusCard, kind === 'error' && styles.statusError]}>
-      {kind === 'error' && <Text style={styles.statusIcon}>!</Text>}
+      {kind === 'error' ? <Text style={styles.statusIcon}>!</Text> : <RefreshCw color={colors.textMuted} size={18} />}
       <View style={styles.statusCopy}>
         <Text style={styles.statusTitle}>{title}</Text>
-        {!!message && <Text style={styles.statusMessage}>{message}</Text>}
+        {message ? <Text style={styles.statusMessage}>{message}</Text> : null}
       </View>
-      {actionLabel && onAction && (
+      {actionLabel && onAction ? (
         <Pressable accessibilityRole="button" onPress={() => { void onAction(); }} style={styles.statusAction}>
           <Text style={styles.statusActionText}>{actionLabel}</Text>
         </Pressable>
-      )}
+      ) : null}
     </View>
   );
 }
 
 function ConfirmDialog({
+  visible,
   title,
   message,
   confirming,
   onCancel,
   onConfirm,
 }: {
+  visible: boolean;
   title: string;
   message: string;
   confirming: boolean;
@@ -432,124 +651,290 @@ function ConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <View style={styles.confirmBackdrop}>
-      <View accessibilityRole="alert" style={styles.confirmDialog}>
-        <Text style={styles.confirmTitle}>{title}</Text>
-        <Text style={styles.confirmMessage}>{message}</Text>
-        <View style={styles.confirmActions}>
-          <Pressable accessibilityRole="button" disabled={confirming} onPress={onCancel} style={styles.cancelButton}>
-            <Text style={styles.cancelText}>Cancelar</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" disabled={confirming} onPress={onConfirm} style={styles.dangerButton}>
-            {confirming ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={styles.dangerText}>Desactivar</Text>}
-          </Pressable>
+    <Modal animationType="fade" onRequestClose={onCancel} transparent visible={visible}>
+      <View style={styles.confirmBackdrop}>
+        <View accessibilityRole="alert" style={styles.confirmDialog}>
+          <Text style={styles.confirmTitle}>{title}</Text>
+          <Text style={styles.confirmMessage}>{message}</Text>
+          <View style={styles.confirmActions}>
+            <Pressable accessibilityRole="button" disabled={confirming} onPress={onCancel} style={styles.cancelButton}>
+              <Text style={styles.cancelText}>Cancelar</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" disabled={confirming} onPress={onConfirm} style={styles.dangerButton}>
+              {confirming
+                ? <ActivityIndicator color={colors.text} size="small" />
+                : <Text style={styles.dangerText}>Desactivar</Text>}
+            </Pressable>
+          </View>
         </View>
       </View>
-    </View>
+    </Modal>
   );
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.code === 'NETWORK_ERROR' || error.code === 'NETWORK_TIMEOUT') {
-      return `${error.message} Si ejecutas la app en un teléfono, configura EXPO_PUBLIC_API_URL con la IP local de tu computadora.`;
-    }
-    return error.message;
-  }
-  return 'Ocurrió un error inesperado al comunicarse con el servidor.';
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: colors.background },
-  content: { width: '100%', maxWidth: 1180, alignSelf: 'center', paddingHorizontal: 32, paddingTop: 18 },
-  contentCompact: { paddingHorizontal: 16, paddingTop: 8 },
-  headerArea: { gap: 20 },
-  topBar: { minHeight: 64, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 14 },
-  topBarCompact: { minHeight: 58 },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 11 },
-  logo: { width: 39, height: 39, borderRadius: 22, borderWidth: 2, borderColor: colors.accent, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceRaised },
-  logoText: { color: colors.text, fontSize: 17, fontWeight: '900' },
-  brandName: { color: colors.text, fontSize: 17, letterSpacing: 0.5, fontWeight: '900' },
-  brandAccent: { color: colors.accent },
-  brandSub: { color: colors.textMuted, fontSize: 8, letterSpacing: 1.2, fontWeight: '700', marginTop: 2 },
-  environment: { color: colors.textMuted, fontSize: 10, fontWeight: '800', letterSpacing: 1.3, paddingHorizontal: 11, paddingVertical: 8, borderRadius: 9, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  headingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 18 },
-  headingCopy: { flex: 1 },
-  eyebrow: { color: colors.accent, fontSize: 10, letterSpacing: 1.6, fontWeight: '800' },
-  pageTitle: { color: colors.text, fontSize: 30, fontWeight: '900', letterSpacing: -0.5, marginTop: 5 },
-  subtitle: { color: colors.textMuted, fontSize: 13, marginTop: 5, lineHeight: 19 },
-  primaryButton: { minHeight: 46, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderRadius: 12, backgroundColor: colors.accent },
-  primaryIcon: { color: colors.background, fontSize: 20, fontWeight: '800', marginTop: -2 },
-  primaryText: { color: colors.background, fontSize: 13, fontWeight: '800' },
+  content: {
+    width: '100%',
+    maxWidth: 1280,
+    alignSelf: 'center',
+    padding: 24,
+    gap: 16,
+  },
+  contentCompact: { padding: 14, gap: 13 },
+
+  headerCard: {
+    padding: 20,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    gap: 16,
+  },
+  headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
+  headerTopCompact: { flexDirection: 'column', alignItems: 'stretch' },
+  headingCopy: { flex: 1, minWidth: 0 },
+  eyebrow: { color: colors.accent, fontSize: 9, fontWeight: '900', letterSpacing: 1.4 },
+  title: { color: colors.text, fontSize: 21, fontWeight: '900', marginTop: 5 },
+  subtitle: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  primaryButton: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingHorizontal: 15,
+    borderRadius: 11,
+    backgroundColor: colors.accent,
+  },
+  primaryText: { color: colors.background, fontSize: 12, fontWeight: '900' },
+  pressed: { opacity: 0.8 },
+  disabled: { opacity: 0.55 },
+
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   toolbarCompact: { flexDirection: 'column', alignItems: 'stretch' },
-  searchWrap: { minHeight: 50, flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 13, borderRadius: 13, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  searchIcon: { width: 25, color: colors.textMuted, fontSize: 22, fontWeight: '600' },
-  searchInput: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 10 },
-  statsRow: { flexDirection: 'row', gap: 12 },
-  statsRowCompact: { flexWrap: 'wrap' },
-  statCard: { flex: 1, minWidth: 145, minHeight: 78, paddingHorizontal: 15, paddingVertical: 13, backgroundColor: colors.surface, borderRadius: 14, borderWidth: 1, borderColor: colors.border },
-  statWide: { flex: 2 },
-  statLabel: { color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 1 },
-  statValue: { color: colors.text, fontSize: 19, fontWeight: '800', marginTop: 8 },
-  statAccent: { color: colors.accent },
-  statWarning: { color: colors.warning },
-  listHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
-  sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  sectionSub: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
-  resultCount: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
-  productCard: { marginTop: 12, padding: 16, backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.border },
-  productCardCompact: { padding: 14 },
-  productMain: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 20 },
-  productIdentity: { flex: 1, minWidth: 180, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  productIcon: { width: 42, height: 42, flexShrink: 0, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
-  productIconLow: { backgroundColor: colors.warningSoft },
-  productIconText: { color: colors.accent, fontSize: 16, fontWeight: '900' },
-  productIconTextLow: { color: colors.warning },
-  productNameWrap: { flex: 1 },
-  productName: { color: colors.text, fontSize: 14, fontWeight: '800' },
-  productCategory: { color: colors.textMuted, fontSize: 11, marginTop: 5 },
-  productMetrics: { flex: 1.2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', gap: 8 },
-  metric: { minWidth: 74 },
-  metricLabel: { color: colors.textMuted, fontSize: 8, letterSpacing: 1, fontWeight: '800' },
-  price: { color: colors.accent, fontSize: 13, fontWeight: '800', marginTop: 6 },
-  stockValue: { color: colors.text, fontSize: 15, fontWeight: '800', marginTop: 4 },
-  stockLow: { color: colors.warning },
+  searchWrap: {
+    minHeight: 48,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceRaised,
+  },
+  searchInput: { flex: 1, color: colors.text, fontSize: 13, paddingVertical: 9 },
+
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  summaryChip: {
+    flex: 1,
+    minWidth: 160,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  summaryChipWide: { flex: 2 },
+  summaryIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceRaised,
+  },
+  summaryCopy: { flex: 1, minWidth: 0 },
+  summaryLabel: { color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.8, textTransform: 'uppercase' },
+  summaryValue: { color: colors.text, fontSize: 14, fontWeight: '800', marginTop: 3 },
+  summaryDanger: { color: colors.danger },
+  summaryInfo: { color: colors.info, fontSize: 12 },
+
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderRadius: 11,
+    borderWidth: 1,
+  },
+  noticeSuccess: { backgroundColor: colors.accentSoft, borderColor: 'rgba(16, 185, 129, 0.3)' },
+  noticeError: { backgroundColor: colors.dangerSoft, borderColor: 'rgba(244, 63, 94, 0.3)' },
+  noticeText: { flex: 1, fontSize: 12, lineHeight: 18, fontWeight: '600' },
+  noticeSuccessText: { color: colors.accent },
+  noticeErrorText: { color: colors.danger },
+  noticeDismiss: { color: colors.textMuted, fontSize: 18, fontWeight: '700' },
+
+  tableCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  tableHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(2, 6, 23, 0.55)',
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  headCell: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  tableRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(37, 49, 73, 0.55)',
+  },
+  colProduct: { flex: 2.2, minWidth: 0 },
+  colCategory: { flex: 1.2, minWidth: 0 },
+  colPrice: { flex: 1, minWidth: 0 },
+  colStock: { flex: 0.9, minWidth: 0 },
+  colStatus: { flex: 1.5, minWidth: 0 },
+  colActions: { width: 196, alignItems: 'flex-end' },
+  alignRight: { textAlign: 'right' },
+  rowActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 },
+
+  productName: { color: colors.text, fontSize: 13, fontWeight: '700', lineHeight: 18 },
+  categoryChip: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 7,
+    backgroundColor: colors.surfaceRaised,
+  },
+  categoryText: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  price: { color: colors.accent, fontSize: 13, fontWeight: '800' },
+  stock: { color: colors.text, fontSize: 13, fontWeight: '800' },
   stockUnit: { color: colors.textMuted, fontSize: 10, fontWeight: '600' },
-  stockBadgeWrap: { minWidth: 82, alignItems: 'flex-end' },
-  stockBadge: { overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 20, fontSize: 9, fontWeight: '800' },
-  stockBadgeLow: { color: colors.warning, backgroundColor: colors.warningSoft },
-  stockBadgeOk: { color: colors.accent, backgroundColor: colors.accentSoft },
-  cardActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8, borderTopWidth: 1, borderTopColor: colors.border, marginTop: 13, paddingTop: 11 },
-  editButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 9, backgroundColor: colors.surfaceRaised },
-  editButtonText: { color: colors.text, fontSize: 11, fontWeight: '700' },
-  deleteButton: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 9, backgroundColor: colors.dangerSoft },
-  deleteButtonText: { color: colors.danger, fontSize: 11, fontWeight: '700' },
-  statusCard: { minHeight: 88, flexDirection: 'row', alignItems: 'center', gap: 13, padding: 17, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 15 },
-  statusError: { borderColor: 'rgba(244, 63, 94, 0.3)', backgroundColor: '#17121b' },
-  statusIcon: { width: 26, height: 26, textAlign: 'center', textAlignVertical: 'center', color: colors.danger, fontWeight: '900', backgroundColor: colors.dangerSoft, borderRadius: 13, overflow: 'hidden' },
-  statusCopy: { flex: 1 },
+
+  badge: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  badgeOk: { backgroundColor: colors.accentSoft, borderColor: 'rgba(16, 185, 129, 0.3)' },
+  badgeLow: { backgroundColor: colors.dangerSoft, borderColor: 'rgba(244, 63, 94, 0.3)' },
+  badgeText: { fontSize: 10, fontWeight: '800' },
+  badgeTextOk: { color: colors.accent },
+  badgeTextLow: { color: colors.danger },
+
+  restockButton: {
+    minHeight: 30,
+    minWidth: 76,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
+    backgroundColor: 'rgba(56, 189, 248, 0.14)',
+  },
+  restockText: { color: colors.info, fontSize: 10, fontWeight: '800' },
+  iconButton: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: colors.surfaceRaised,
+  },
+  iconButtonDanger: { backgroundColor: colors.dangerSoft },
+  readOnlyText: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+
+  mobileCard: {
+    padding: 15,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(37, 49, 73, 0.55)',
+  },
+  mobileTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  mobileIdentity: { flex: 1, minWidth: 0, gap: 6 },
+  mobileMetrics: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  mobileMetricLabel: { color: colors.textMuted, fontSize: 9, fontWeight: '800', letterSpacing: 0.8, marginBottom: 3 },
+  mobileActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  mobileRestock: { flex: 1 },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', padding: 34, gap: 8 },
+  emptyTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  emptyText: { color: colors.textMuted, fontSize: 12, textAlign: 'center', lineHeight: 18 },
+  emptyButton: {
+    marginTop: 8,
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 13,
+    borderRadius: 9,
+    backgroundColor: colors.accentSoft,
+  },
+  emptyButtonText: { color: colors.accent, fontSize: 11, fontWeight: '800' },
+
+  footerNote: { color: colors.textMuted, fontSize: 11, textAlign: 'right' },
+
+  statusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    padding: 15,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  statusError: { borderColor: 'rgba(244, 63, 94, 0.35)', backgroundColor: colors.dangerSoft },
+  statusIcon: { color: colors.danger, fontSize: 18, fontWeight: '900' },
+  statusCopy: { flex: 1, minWidth: 0 },
   statusTitle: { color: colors.text, fontSize: 13, fontWeight: '800' },
-  statusMessage: { color: colors.textMuted, fontSize: 11, lineHeight: 17, marginTop: 5 },
-  statusAction: { paddingHorizontal: 11, paddingVertical: 8, borderRadius: 9, backgroundColor: colors.surfaceRaised },
+  statusMessage: { color: colors.textMuted, fontSize: 11, lineHeight: 17, marginTop: 3 },
+  statusAction: { paddingHorizontal: 11, paddingVertical: 8, borderRadius: 8, backgroundColor: colors.surfaceRaised },
   statusActionText: { color: colors.accent, fontSize: 11, fontWeight: '800' },
-  notice: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 12, borderRadius: 10 },
-  noticeSuccess: { backgroundColor: colors.accentSoft },
-  noticeError: { backgroundColor: colors.dangerSoft },
-  noticeText: { flex: 1, fontSize: 12, fontWeight: '700' },
-  successText: { color: colors.accent },
-  errorText: { color: colors.danger },
-  noticeDismiss: { marginLeft: 12, color: colors.textMuted, fontSize: 19 },
-  confirmBackdrop: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, justifyContent: 'center', alignItems: 'center', padding: 20, backgroundColor: 'rgba(2, 6, 23, 0.78)' },
-  confirmDialog: { width: '100%', maxWidth: 440, padding: 22, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  confirmTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
-  confirmMessage: { color: colors.textMuted, fontSize: 13, lineHeight: 20, marginTop: 10 },
-  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 9, marginTop: 20 },
+
+  confirmBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: 'rgba(2, 6, 23, 0.78)',
+  },
+  confirmDialog: {
+    width: '100%',
+    maxWidth: 420,
+    padding: 22,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    gap: 10,
+  },
+  confirmTitle: { color: colors.text, fontSize: 18, fontWeight: '900' },
+  confirmMessage: { color: colors.textMuted, fontSize: 12, lineHeight: 19 },
+  confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 9, marginTop: 8 },
   cancelButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.surfaceRaised },
-  cancelText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
-  dangerButton: { minHeight: 40, minWidth: 105, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#e11d48' },
-  dangerText: { color: colors.text, fontSize: 12, fontWeight: '800' },
-  pressed: { opacity: 0.78 },
-  disabled: { opacity: 0.5 },
-  listFooter: { height: 28 },
+  cancelText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  dangerButton: { minHeight: 40, minWidth: 104, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.danger },
+  dangerText: { color: colors.background, fontSize: 12, fontWeight: '900' },
 });
