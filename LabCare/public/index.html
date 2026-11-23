@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LabCare | Solicitudes de mantenimiento</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">LABCARE</p>
+      <h1>Solicitudes de mantenimiento</h1>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel form-panel" aria-labelledby="form-title">
+      <h2 id="form-title">Nueva solicitud</h2>
+      <form id="create-form" novalidate>
+        <label>Equipo
+          <select id="equipo" name="equipo_id" required></select>
+        </label>
+        <label>Solicitante
+          <input id="solicitante" name="solicitante" minlength="3" required>
+        </label>
+        <label>Descripcion
+          <textarea id="descripcion" name="descripcion" minlength="10" rows="4" required></textarea>
+        </label>
+        <label>Prioridad
+          <select id="prioridad" name="prioridad" required>
+            <option value="BAJA">BAJA</option>
+            <option value="MEDIA" selected>MEDIA</option>
+            <option value="ALTA">ALTA</option>
+          </select>
+        </label>
+        <button type="submit">Registrar solicitud</button>
+      </form>
+    </section>
+
+    <section class="panel list-panel" aria-labelledby="list-title">
+      <h2 id="list-title">Solicitudes activas</h2>
+      <div class="filters">
+        <input id="search" type="search" placeholder="Codigo, solicitante o equipo">
+        <select id="filter-prioridad">
+          <option value="">Todas las prioridades</option>
+          <option>BAJA</option>
+          <option>MEDIA</option>
+          <option>ALTA</option>
+        </select>
+        <select id="filter-estado">
+          <option value="">Todos los estados</option>
+          <option>PENDIENTE</option>
+          <option>EN_PROCESO</option>
+          <option>RESUELTA</option>
+          <option>CANCELADA</option>
+        </select>
+      </div>
+      <div id="message" class="message" role="status" aria-live="polite"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Codigo</th>
+              <th>Equipo</th>
+              <th>Solicitante</th>
+              <th>Prioridad</th>
+              <th>Estado</th>
+              <th>Fecha</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="solicitudes-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="detail-dialog">
+    <button class="close" type="button" data-close="detail-dialog" aria-label="Cerrar">&times;</button>
+    <h2>Detalle de solicitud</h2>
+    <div id="detail-content"></div>
+  </dialog>
+
+  <dialog id="edit-dialog">
+    <button class="close" type="button" data-close="edit-dialog" aria-label="Cerrar">&times;</button>
+    <h2>Editar solicitud</h2>
+    <form id="edit-form" novalidate>
+      <input type="hidden" id="edit-id">
+      <label>Equipo
+        <select id="edit-equipo" required></select>
+      </label>
+      <label>Solicitante
+        <input id="edit-solicitante" minlength="3" required>
+      </label>
+      <label>Descripcion
+        <textarea id="edit-descripcion" minlength="10" rows="4" required></textarea>
+      </label>
+      <label>Prioridad
+        <select id="edit-prioridad" required>
+          <option>BAJA</option>
+          <option>MEDIA</option>
+          <option>ALTA</option>
+        </select>
+      </label>
+      <button type="submit">Guardar cambios</button>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+
