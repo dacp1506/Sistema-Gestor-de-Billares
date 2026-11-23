@@ -12,6 +12,8 @@ const sesionRoutes = require('./sesionRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
 const reportRoutes = require('./reportRoutes');
 const configuracionRoutes = require('./configuracionRoutes');
+const solicitudRoutes = require('./solicitudRoutes');
+const equipoRoutes = require('./equipoRoutes');
 
 const router = express.Router();
 
@@ -28,5 +30,7 @@ router.use('/sesiones', sesionRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/reportes', reportRoutes);
 router.use('/configuraciones', configuracionRoutes);
+router.use('/solicitudes', solicitudRoutes);
+router.use('/equipos', equipoRoutes);
 
 module.exports = router;

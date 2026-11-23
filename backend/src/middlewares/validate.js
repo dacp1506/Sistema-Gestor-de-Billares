@@ -1,3 +1,5 @@
+const { PRIORIDADES, ESTADOS } = require('../domain/solicitud');
+
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function httpError(status, code, message) {
@@ -223,6 +225,67 @@ function validateReservationStatus(request, response, next) {
   return next();
 }
 
+function validateMaintenanceFields(body) {
+  const { id_equipo, solicitante, descripcion, prioridad } = body || {};
+  const errors = [];
+  const equipoId = Number(id_equipo);
+  const cleanSolicitante = typeof solicitante === 'string' ? solicitante.trim() : '';
+  const cleanDescripcion = typeof descripcion === 'string' ? descripcion.trim() : '';
+  const cleanPrioridad = typeof prioridad === 'string' ? prioridad.trim().toUpperCase() : '';
+
+  if (!Number.isSafeInteger(equipoId) || equipoId <= 0) {
+    errors.push('id_equipo debe ser un entero positivo.');
+  }
+  if (cleanSolicitante.length < 3) {
+    errors.push('solicitante es obligatorio y debe tener al menos 3 caracteres.');
+  } else if (cleanSolicitante.length > 120) {
+    errors.push('solicitante debe tener hasta 120 caracteres.');
+  }
+  if (cleanDescripcion.length < 10) {
+    errors.push('descripcion es obligatoria y debe tener al menos 10 caracteres.');
+  } else if (cleanDescripcion.length > 2000) {
+    errors.push('descripcion debe tener hasta 2000 caracteres.');
+  }
+  if (!PRIORIDADES.includes(cleanPrioridad)) {
+    errors.push('prioridad solo admite BAJA, MEDIA o ALTA.');
+  }
+
+  return {
+    errors,
+    value: {
+      id_equipo: equipoId,
+      solicitante: cleanSolicitante,
+      descripcion: cleanDescripcion,
+      prioridad: cleanPrioridad
+    }
+  };
+}
+
+function validateSolicitudCreate(request, response, next) {
+  const { errors, value } = validateMaintenanceFields(request.body);
+  if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+  request.validatedBody = value;
+  return next();
+}
+
+function validateSolicitudUpdate(request, response, next) {
+  const { errors, value } = validateMaintenanceFields(request.body);
+  if (errors.length) return next(httpError(400, 'VALIDATION_ERROR', errors.join(' ')));
+  request.validatedBody = value;
+  return next();
+}
+
+function validateSolicitudStatus(request, response, next) {
+  const estado = typeof request.body?.estado === 'string'
+    ? request.body.estado.trim().toUpperCase()
+    : '';
+  if (!ESTADOS.includes(estado)) {
+    return next(httpError(400, 'VALIDATION_ERROR', 'estado debe ser PENDIENTE, EN_PROCESO, RESUELTA o CANCELADA.'));
+  }
+  request.validatedBody = { estado };
+  return next();
+}
+
 function validateLogin(request, response, next) {
   const { identifier, email, password } = request.body || {};
   const loginIdentifier = typeof identifier === 'string' ? identifier : email;
@@ -412,6 +475,9 @@ module.exports = {
   validateCashClose,
   validateReservation,
   validateReservationStatus,
+  validateSolicitudCreate,
+  validateSolicitudUpdate,
+  validateSolicitudStatus,
   validateLogin,
   validateRegistration,
   validateUser,

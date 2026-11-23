@@ -12,6 +12,7 @@ const resourceBranchQueries = {
             JOIN mesas m ON m.id_mesa = r.id_mesa WHERE r.id_reserva = $1`,
   caja: 'SELECT id_sucursal, id_usuario FROM caja_turnos WHERE id_caja = $1',
   venta: 'SELECT id_sucursal FROM ventas WHERE id_venta = $1',
+  solicitud: 'SELECT id_sucursal FROM solicitudes_mantenimiento WHERE id_solicitud = $1',
 };
 
 function requireAuth(request, response, next) {

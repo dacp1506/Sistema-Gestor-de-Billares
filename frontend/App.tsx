@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   Sliders,
   Wallet,
+  Wrench,
   ChartNoAxesCombined,
   Users,
   X,
@@ -30,6 +31,7 @@ import ArqueoScreen from './src/screens/ArqueoScreen';
 import TablesScreen from './src/screens/TablesScreen';
 import UsersScreen from './src/screens/UsersScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import MaintenanceScreen from './src/screens/MaintenanceScreen';
 import { useAccessibleModal } from './src/hooks/useAccessibleModal';
 import { setAccessToken } from './src/services/api';
 import type { AuthUser } from './src/services/auth';
@@ -37,7 +39,7 @@ import { clearPosCarts } from './src/services/posCart';
 import { getSettings, settingsPill, type UserSettings } from './src/services/settings';
 import { colors } from './src/theme';
 
-type ScreenKey = 'dashboard' | 'pos' | 'productos' | 'mesas' | 'caja' | 'reservas' | 'historial' | 'reportes' | 'sucursales' | 'usuarios' | 'configuracion';
+type ScreenKey = 'dashboard' | 'pos' | 'productos' | 'mesas' | 'caja' | 'reservas' | 'mantenimiento' | 'historial' | 'reportes' | 'sucursales' | 'usuarios' | 'configuracion';
 
 type NavigationItem = {
   key: ScreenKey;
@@ -52,6 +54,7 @@ const navigationSections: Array<{ title: string; items: NavigationItem[] }> = [
       { key: 'dashboard', label: 'Dashboard Mesas', icon: LayoutDashboard },
       { key: 'pos', label: 'Control Mesa & POS', icon: ShoppingCart },
       { key: 'reservas', label: 'Reservas', icon: CalendarClock },
+      { key: 'mantenimiento', label: 'Mantenimiento', icon: Wrench },
       { key: 'historial', label: 'Historial y Recibos', icon: ReceiptText },
       { key: 'caja', label: 'Arqueo y Caja', icon: Wallet },
     ],
@@ -74,6 +77,7 @@ const pageDetails: Record<ScreenKey, { title: string; subtitle: string }> = {
   mesas: { title: 'Mesas y tarifas', subtitle: 'Control de disponibilidad y sesiones de juego' },
   caja: { title: 'Arqueo y caja', subtitle: 'Arqueo, cierre de turno y conciliación de efectivo' },
   reservas: { title: 'Reservas', subtitle: 'Agenda de mesas por sucursal' },
+  mantenimiento: { title: 'Mantenimiento', subtitle: 'Solicitudes de mantenimiento de equipos del salón' },
   historial: { title: 'Historial y recibos', subtitle: 'Ventas registradas y comprobantes' },
   reportes: { title: 'Reportes financieros', subtitle: 'Ingresos registrados por período y sucursal' },
   sucursales: { title: 'Sucursales', subtitle: 'Administración de locales de la cadena' },
@@ -171,6 +175,8 @@ export default function App() {
         return <ArqueoScreen user={user} />;
       case 'reservas':
         return <ReservationsScreen user={user} onOpenPos={openPos} />;
+      case 'mantenimiento':
+        return <MaintenanceScreen user={user} />;
       case 'historial':
         return <HistoryScreen user={user} />;
       case 'reportes':
