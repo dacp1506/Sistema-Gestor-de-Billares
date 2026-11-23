@@ -12,7 +12,7 @@ Sistema de gestión multi-sucursal para salones de billar. El backend REST está
 1. Instala las dependencias: `npm --prefix backend install` y `npm --prefix frontend install`.
 2. Copia `backend/.env.example` a `backend/.env` y configura `DATABASE_URL`, `DATABASE_SSL=true` y un `JWT_SECRET` aleatorio. Puedes generarlo con `node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"`; no lo compartas ni lo subas al repositorio. El backend usa HTTP `PORT=3000` por defecto. `HOST=0.0.0.0` hace que escuche en todas las interfaces, pero no es una URL que se pueda abrir en el navegador; en la misma computadora usa `http://localhost:3000`. Desde otro dispositivo, usa la IP LAN del PC (por ejemplo, `http://192.168.1.20:3000`). El puerto PostgreSQL `5432` es para la base de datos, no para el servidor HTTP. Para validar el certificado de Supabase, descarga su certificado raíz desde Database Settings → SSL Configuration, guárdalo como `backend/certs/supabase-root.crt` y configura `DATABASE_SSL_CA=certs/supabase-root.crt`.
 3. Copia `frontend/.env.example` a `frontend/.env`. Para navegador local conserva `http://127.0.0.1:3000/api`; para un teléfono, usa la IP LAN del PC y el puerto HTTP del backend (por ejemplo `http://192.168.1.20:3000/api`). No pongas la contraseña de Supabase ni `JWT_SECRET` en variables `EXPO_PUBLIC_*`. La URL base se resuelve en tiempo de ejecución en `frontend/src/services/api.ts` (con `expo-constants`): si `EXPO_PUBLIC_API_URL` apunta a `127.0.0.1` o `localhost` y la app corre en Android, se descarta porque en el teléfono sería el propio dispositivo, y se usa la IP del host de Metro con el puerto `3000`; en el emulador de Android se usa `10.0.2.2`. Como las variables `EXPO_PUBLIC_*` se incrustan al generar el bundle, reinicia Expo con `npx expo start -c` después de cambiarlas.
-4. En una base nueva, ejecuta `backend/database/schema.sql` en Supabase o con `psql`. En una base existente creada con el esquema anterior, ejecuta primero y una sola vez `backend/database/migrations/add_usernames_to_branch_staff.sql`; asigna nombres iniciales `operador_<id>` al personal y conserva los correos previos. No vuelvas a ejecutar `schema.sql` antes de esa migración: las tablas existentes todavía no tienen la columna `username`. En una base existente ejecuta además `backend/database/migrations/add_user_settings.sql` (crea la tabla `configuraciones_usuario` con las preferencias de cada cuenta); ambas migraciones son idempotentes.
+4. En una base nueva, ejecuta `backend/database/schema.sql` en Supabase o con `psql`. En una base existente creada con el esquema anterior, ejecuta primero y una sola vez `backend/database/migrations/add_usernames_to_branch_staff.sql`; asigna nombres iniciales `operador_<id>` al personal y conserva los correos previos. No vuelvas a ejecutar `schema.sql` antes de esa migración: las tablas existentes todavía no tienen la columna `username`. En una base existente ejecuta además `backend/database/migrations/add_user_settings.sql` (crea la tabla `configuraciones_usuario` con las preferencias de cada cuenta) y `backend/database/migrations/add_mantenimiento_module.sql` (crea `equipos` y `solicitudes_mantenimiento` y carga los equipos semilla en la primera sucursal); todas las migraciones son idempotentes.
 5. No ejecutes `backend/database/seed.js` en Supabase ni en una base con datos reales: contiene identificadores fijos, cuentas de demostración y movimientos ficticios. Crea el catálogo desde la aplicación o inserta únicamente datos base revisados con SQL; las ventas, reservas, sesiones y turnos deben generarse por operaciones reales.
 6. Crea el primer `admin_general` desde “Registrar administrador” en el login, o ejecuta `node database/create-admin.js` desde `backend/` en una terminal interactiva. El registro público se cierra al existir un administrador general; después, solo un administrador autenticado puede crear cuentas de sucursal. El comando CLI pide nombre, correo y contraseña oculta.
 7. Desde la raíz del repositorio, inicia el backend API con `npm start`; con la configuración de ejemplo queda en `http://localhost:3000`.
@@ -36,6 +36,10 @@ backend/
       productoController.js
       sesionController.js
       finanzasController.js
+      solicitudController.js
+      equipoController.js
+    domain/
+      solicitud.js
     middlewares/
     models/
     routes/
@@ -52,6 +56,7 @@ frontend/
   src/
     components/
       BranchPicker.tsx        # Selector de sucursal
+      MaintenanceFormModal.tsx # Modal de alta/edición de solicitud
       OptionPicker.tsx        # Selector desplegable reutilizable
       ProductFormModal.tsx    # Modal de alta/edición de producto
     hooks/
@@ -69,11 +74,12 @@ frontend/
       SettingsScreen.tsx      # Configuración de la aplicación
       TablesScreen.tsx
       UsersScreen.tsx         # Usuarios y roles
+      MaintenanceScreen.tsx   # Solicitudes de mantenimiento
     services/
     theme.ts
 ```
 
-Los controladores implementados abarcan sucursales, usuarios, mesas, productos, sesiones, reservas, caja y ventas POS. Los modelos usan consultas parametrizadas; las operaciones de ventas mantienen transacciones PostgreSQL.
+Los controladores implementados abarcan sucursales, usuarios, mesas, productos, sesiones, reservas, caja, ventas POS y mantenimiento de equipos. Los modelos usan consultas parametrizadas; las operaciones de ventas mantienen transacciones PostgreSQL.
 
 Expo es la aplicación cliente que se está ampliando para compartir interfaz y lógica entre navegador y móviles. La maqueta en `DATA TO BUILD/index.html` solo orienta el diseño y no se conecta a la API. El backend mantiene las rutas para inventario, mesas/sesiones, caja/POS, reservas, historial, dashboard, reportes, sucursales y usuarios, con permisos por rol.
 
@@ -88,6 +94,12 @@ Los tres módulos de administración siguen la maqueta de `DATA TO BUILD/index.h
 **Sucursales cadena** (`frontend/src/screens/BranchesScreen.tsx`): cuadrícula de tarjetas con nombre, badge ACTIVA, dirección, teléfono, **Mesas Activas x/y**, **Ingresos Hoy** y el botón **Administrar esta Sucursal**, que abre el dashboard con esa sucursal seleccionada. Desde la misma tarjeta se editan los datos o se desactiva la sucursal con confirmación; el alta se hace en un modal con nombre, dirección y teléfono. Las tres métricas por sucursal las calcula el backend en `GET /api/sucursales`.
 
 **Usuarios y roles** (`frontend/src/screens/UsersScreen.tsx`, solo `admin_general`): tres indicadores (Usuarios Activos, Admins de Sucursal, Cajeros / Operadores), barra de filtros (búsqueda por nombre o credencial, rol y sucursal) y tabla Usuario / Rol / Sucursal / Credencial / Estado / Acciones. Permite registrar y editar usuarios, activar o desactivar con un clic sobre el estado y dar de baja con confirmación. La columna Credencial muestra el usuario `@nombre` o el correo real: la maqueta usa un PIN de 4 dígitos, pero el esquema `usuarios` no tiene esa columna, así que no se inventan datos. El administrador no puede desactivar ni editar su propia cuenta, y la contraseña solo se envía cuando se escribe una nueva.
+
+## Módulo de mantenimiento de equipos
+
+El módulo **Mantenimiento** (`frontend/src/screens/MaintenanceScreen.tsx`) adapta el caso LabCare al dominio del salón de billar. Permite reportar fallas de mesas, bolas, tacos e iluminación por sucursal, consultar el detalle, editar los datos descriptivos, cambiar el estado respetando el flujo `PENDIENTE → EN_PROCESO → RESUELTA` (con `CANCELADA` como salida) y eliminar lógicamente sin borrar el histórico. Incluye búsqueda por código, solicitante o equipo y filtros por prioridad y estado.
+
+El backend expone el catálogo de equipos operativos y las solicitudes bajo MVC (`solicitudModel`, `solicitudController`, `solicitudRoutes` y `domain/solicitud.js`). El código `SOL-AAAAMMDD-XXX` se genera en una transacción con bloqueo de asesoría para evitar duplicados concurrentes; el estado inicial siempre es `PENDIENTE`. Los usuarios de sucursal solo ven su propia sucursal; los cajeros pueden registrar y consultar, mientras que editar, cambiar estado y eliminar requiere rol administrador.
 
 ## Configuración de la aplicación
 
@@ -118,6 +130,11 @@ El administrador general se registra con correo y contraseña. Los administrador
 - `GET|POST /api/reservas` — listar y crear reservas por sucursal o fecha.
 - `GET /api/reservas/:id` y `PATCH /api/reservas/:id/estado` — consultar y actualizar estado de una reserva.
 - `GET|PUT /api/configuraciones` — leer y guardar las preferencias de la cuenta autenticada (tema, idioma, moneda, nombre comercial del ticket, IVA declarado y formato de impresión). `PUT` acepta actualizaciones parciales.
+- `GET /api/equipos?id_sucursal=:id` — equipos operativos de la sucursal disponibles para una solicitud de mantenimiento.
+- `GET /api/solicitudes?id_sucursal=:id&q=&prioridad=&estado=` — solicitudes activas de la sucursal con búsqueda y filtros.
+- `GET|POST /api/solicitudes` — consultar el listado y registrar una solicitud (estado inicial `PENDIENTE`, código único generado por el servidor).
+- `GET|PUT|DELETE /api/solicitudes/:id` — detalle, edición descriptiva y eliminación lógica (`activo=false`).
+- `PATCH /api/solicitudes/:id/estado` — cambiar estado solo si la transición está permitida; responde `409` cuando no lo está.
 
 Todos los endpoints `/api` excepto `POST /api/auth/login` requieren `Authorization: Bearer <token>`. Las cuentas `admin_general` pueden consultar todas las sucursales y administrar usuarios y sucursales; `admin_sucursal` y `cajero` quedan limitados a la sucursal de su cuenta. La administración de productos y mesas requiere rol administrador. Las operaciones de venta y caja usan el usuario del token. Para abrir una sesión desde el dashboard global, `admin_general` selecciona un usuario activo de la sucursal; el backend comprueba que ese operador pertenezca a la sucursal. Los administradores y cajeros de sucursal siguen usando su identidad autenticada.
 
@@ -139,7 +156,7 @@ No se publican credenciales de demostración. En una base nueva, crea el primer 
 npm run check
 ```
 
-`npm run check` ejecuta las pruebas backend y el typecheck del frontend (30 pruebas del backend en la versión actual). Este último usa una pila de Node ampliada porque TypeScript 6 puede exceder la pila predeterminada en este proyecto. `npm start` inicia solo la API; `npm run frontend:web` inicia el cliente Expo para navegador. Las pruebas unitarias y de tipos no requieren base de datos. Para usar la API, configura PostgreSQL en `backend/.env`; si PostgreSQL no está disponible o el URI apunta a una base inexistente, la API devuelve un error `503` sanitizado. En desarrollo CORS admite localhost y direcciones LAN; antes de publicar, restringe `FRONTEND_ORIGINS` a los orígenes del despliegue.
+`npm run check` ejecuta las pruebas backend y el typecheck del frontend (47 pruebas del backend en la versión actual). Este último usa una pila de Node ampliada porque TypeScript 6 puede exceder la pila predeterminada en este proyecto. `npm start` inicia solo la API; `npm run frontend:web` inicia el cliente Expo para navegador. Las pruebas unitarias y de tipos no requieren base de datos. Para usar la API, configura PostgreSQL en `backend/.env`; si PostgreSQL no está disponible o el URI apunta a una base inexistente, la API devuelve un error `503` sanitizado. En desarrollo CORS admite localhost y direcciones LAN; antes de publicar, restringe `FRONTEND_ORIGINS` a los orígenes del despliegue.
 
 El uso online está soportado por el cliente y la API cuando la base de datos es accesible. El modo offline aún no está implementado: antes de construirlo hay que definir qué operaciones se permiten desconectadas, dónde se almacenan localmente y cómo se sincronizan ventas, inventario, sesiones y cambios concurrentes entre sucursales.
 
